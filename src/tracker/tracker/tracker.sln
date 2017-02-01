@@ -10,6 +10,9 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "brokerdll", "..\..\brokerdll\brokerdll\brokerdll.vcxproj", "{C1F9BA71-2A0E-43EA-9CA4-DCE82F76FFF7}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "unit_test_openvr_semantics", "..\..\unit_test_openvr_semantics\unit_test_openvr_semantics\unit_test_openvr_semantics.vcxproj", "{F5FC7B60-2278-444D-B3FC-D03D48F54345}"
+	ProjectSection(ProjectDependencies) = postProject
+		{D1DF850E-E6F1-465F-A98A-AF04A0D55AD1} = {D1DF850E-E6F1-465F-A98A-AF04A0D55AD1}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

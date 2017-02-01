@@ -1271,6 +1271,7 @@ void query_scalar_rcerror(scalar_result<T,ResultType> *result, InterfaceHandle *
 // vector of values history
 #define VDECL2(var_name, presence_type, type_name) HistoryVectorNodeOrIterator<type_name, presence_type, bIsIterator> var_name
 
+
 // to relate the followng 4 c
 struct HistoryNode{};
 struct HistoryIterator{};
@@ -1546,13 +1547,15 @@ struct vrschema
 		VDECL2(applications_that_support_mime_type, AlwaysAndForever, char);
 	};
 
-	struct app_schema
+	struct applications_schema
 	{
-		app_schema(ALLOCATOR_DECL)
+		applications_schema(ALLOCATOR_DECL)
 			:
 			INIT(starting_application, char),
 			INIT(transition_state, EVRApplicationTransitionState),
 			INIT(is_quit_user_prompt, bool),
+			INIT(num_applications, uint32_t),
+			INIT(current_scene_process_id, uint32_t),
 			mime_types(allocator),
 			applications(allocator)
 		{}
@@ -1560,6 +1563,12 @@ struct vrschema
 		VDECL2(starting_application, EVRApplicationError, char);
 		SDECL2(transition_state, AlwaysAndForever, EVRApplicationTransitionState);
 		SDECL2(is_quit_user_prompt, AlwaysAndForever, bool);
+		SDECL2(current_scene_process_id, AlwaysAndForever, uint32_t);
+
+		// 2/1/2017 applications is monotonically increasing.  but number of applications at a point
+		// in time varies:
+		SDECL2(num_applications, AlwaysAndForever, uint32_t);
+
 		std::vector<mime_type_schema, ALLOCATOR_TYPE> mime_types;
 		std::vector<application_schema, ALLOCATOR_TYPE> applications;
 	};
@@ -1867,7 +1876,7 @@ struct vrschema
 	vrschema(ALLOCATOR_DECL)
 		:	
 		system_node(allocator),
-		app_node(allocator),
+		applications_node(allocator),
 		settings_node(allocator),
 		chaperone_node(allocator),
 		chaperone_setup_node(allocator),
@@ -1879,7 +1888,7 @@ struct vrschema
 	{}
 
 	system_schema			system_node;		// schema is the type. node is the instace
-	app_schema				app_node;
+	applications_schema		applications_node;
 	settings_schema			settings_node;
 	chaperone_schema		chaperone_node;
 	chaperonesetup_schema	chaperone_setup_node;
@@ -2602,15 +2611,16 @@ struct SystemWrapper
 	StringPool *string_pool;
 };
 
-struct ApplicationWrapper
+struct ApplicationsWrapper
 {
-	ApplicationWrapper(IVRApplications *appi_in, StringPool *string_pool_in)
+	ApplicationsWrapper(IVRApplications *appi_in, StringPool *string_pool_in)
 		: appi(appi_in), string_pool(string_pool_in)
 	{}
 
 	SCALAR_WRAP(IVRApplications, appi, GetApplicationCount);
 	SCALAR_WRAP(IVRApplications, appi, GetTransitionState);
 	SCALAR_WRAP(IVRApplications, appi, IsQuitUserPromptRequested);
+	SCALAR_WRAP(IVRApplications, appi, GetCurrentSceneProcessId);
 
 	SCALAR_WRAP_INDEXED(IVRApplications, appi, bool, IsApplicationInstalled, const char *);
 	SCALAR_WRAP_INDEXED(IVRApplications, appi, bool, GetApplicationAutoLaunch, const char *);
@@ -3307,7 +3317,7 @@ static void visit_properties(visitor_fn &visitor,
 template <typename visitor_fn, typename T>
 static void visit_properties(visitor_fn &visitor,
 	vrstate::properties_subtable<T, vr::EVRApplicationProperty, vr::EVRApplicationError> &sub_table,
-	ApplicationWrapper appw, const char *app_key)
+	ApplicationsWrapper appw, const char *app_key)
 {
 	for (int i = 0; i < sub_table.tbl_size; i++)
 	{
@@ -3328,7 +3338,7 @@ static void visit_properties(visitor_fn &visitor,
 template <typename visitor_fn, typename T>
 static void visit_string_properties(visitor_fn &visitor,
 	vrstate::properties_subtable<T, vr::EVRApplicationProperty, vr::EVRApplicationError> &sub_table,
-	ApplicationWrapper wrap, const char *app_key) 
+	ApplicationsWrapper wrap, const char *app_key) 
 {
 	if (visitor.visit_openvr())
 	{
@@ -3741,7 +3751,7 @@ static void visit_system_node(
 
 template <typename visitor_fn>
 void visit_application_state(visitor_fn &visitor, vrstate::application_schema *ss,
-	ApplicationWrapper wrap, uint32_t app_index)
+	ApplicationsWrapper wrap, uint32_t app_index)
 {
 	visitor.start_group_node("app", app_index);
 
@@ -3776,12 +3786,12 @@ void visit_application_state(visitor_fn &visitor, vrstate::application_schema *s
 		visit_properties(visitor, ss->uint64_props, wrap, "");
 	}
 
-	visitor.end_group_node("app_node", app_index);
+	visitor.end_group_node("applications_node", app_index);
 }
 
 template <typename visitor_fn>
 void visit_mime_type_schema(visitor_fn &visitor, vrstate::mime_type_schema *ss,
-	ApplicationWrapper wrap, uint32_t mime_index)
+	ApplicationsWrapper wrap, uint32_t mime_index)
 {
 	const char *mime_type = mime_types[mime_index].name;
 	if (visitor.visit_openvr())
@@ -3798,13 +3808,16 @@ void visit_mime_type_schema(visitor_fn &visitor, vrstate::mime_type_schema *ss,
 }
 
 template <typename visitor_fn>
-static void visit_app_node(visitor_fn &visitor, vrstate::app_schema *ss, ApplicationWrapper wrap, ALLOCATOR_DECL)
+static void visit_applications_node(visitor_fn &visitor, vrstate::applications_schema *ss, ApplicationsWrapper wrap, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("app", -1);
 
 	LEAF_VECTOR1(starting_application, wrap.GetStartingApplication());
 	LEAF_SCALAR(transition_state, wrap.GetTransitionState());
 	LEAF_SCALAR(is_quit_user_prompt, wrap.IsQuitUserPromptRequested());
+	LEAF_SCALAR(num_applications, wrap.GetApplicationCount());
+	LEAF_SCALAR(current_scene_process_id, wrap.GetCurrentSceneProcessId());
+	
 
 	ss->mime_types.reserve(mime_tbl_size);
 	while (ss->mime_types.size() < mime_tbl_size)
@@ -4403,7 +4416,7 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 	openvr_broker::open_vr_interfaces &interfaces)
 {
 	SystemWrapper			system_wrapper(			interfaces.sysi,	&outer_state->m_string_pool);
-	ApplicationWrapper		application_wrapper(	interfaces.appi,	&outer_state->m_string_pool);
+	ApplicationsWrapper		application_wrapper(	interfaces.appi,	&outer_state->m_string_pool);
 	SettingsWrapper			settings_wrapper(		interfaces.seti,	&outer_state->m_string_pool);
 	ChaperoneWrapper		chaperone_wrapper(		interfaces.chapi,	&outer_state->m_string_pool);
 	ChaperoneSetupWrapper	chaperone_setup_wrapper(interfaces.chapsi,	&outer_state->m_string_pool);
@@ -4428,8 +4441,8 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 	}
 
 	{
-		twrap t("app_node");
-		visit_app_node(visitor, &s->app_node, application_wrapper, allocator);
+		twrap t("applications_node");
+		visit_applications_node(visitor, &s->applications_node, application_wrapper, allocator);
 	}
 	
 	{
@@ -4542,7 +4555,17 @@ static void update_timestamp(tracker *s)
 // START OF CURSOR TEST
 static int util_char_vector_cmp(const char *pch, std::vector<char, ALLOCATOR_TYPE> &v)
 {
-	return strncmp(pch, &v[0], v.size());
+	if (v.size() == 0)
+	{
+		if (*pch == '\0')
+			return 0;
+		else
+			return 1;
+	}
+	else
+	{
+		return strncmp(pch, &v[0], v.size());
+	}
 }
 
 template <typename T>
@@ -4770,9 +4793,6 @@ public:
 		{
 			iter_ref.spatial_sorts.emplace_back(m_context->m_allocator);
 		}
-		
-
-
 	}
 
 	bool VRSystemCursor::IsValidDeviceIndex(vr::TrackedDeviceIndex_t unDeviceIndex);
@@ -5382,10 +5402,33 @@ bool VRSystemCursor::IsInputFocusCapturedByAnotherProcess()
 
 struct VRApplicationsCursor : public VRApplicationsCppStub
 {
+
+	CursorContext *m_context;
+	vrstate::applications_schema &state_ref;
+	vriterator::applications_schema &iter_ref;
+
 	VRApplicationsCursor(CursorContext *context)
 		:
-		m_context(context)
-	{}
+		m_context(context),
+		state_ref(m_context->state->applications_node),
+		iter_ref(m_context->iterators->applications_node)
+	{
+		SynchronizeChildVectors();
+	
+	}
+
+	void SynchronizeChildVectors()
+	{
+		while (iter_ref.applications.size() < state_ref.applications.size())
+		{
+			iter_ref.applications.emplace_back(m_context->m_allocator);
+		}
+		
+		while (iter_ref.mime_types.size() < state_ref.mime_types.size())
+		{
+			iter_ref.mime_types.emplace_back(m_context->m_allocator);
+		}
+	}
 	
 	bool IsApplicationInstalled(const char * pchAppKey) override;
 	uint32_t GetApplicationCount() override;
@@ -5405,23 +5448,28 @@ struct VRApplicationsCursor : public VRApplicationsCppStub
 	vr::EVRApplicationTransitionState GetTransitionState() override;
 	const char * GetApplicationsTransitionStateNameFromEnum(vr::EVRApplicationTransitionState state) override;
 	bool IsQuitUserPromptRequested() override;
+	uint32_t GetCurrentSceneProcessId() override;
 
 	bool IsValidAppIndex(uint32_t unApplicationIndex);
 	bool GetIndexForAppKey(const char *pchKey, int *index);
 
-	CursorContext *m_context;
 };
 
 #define SYNC_APP_STATE(local_name, variable_name) \
-auto local_name ## iter = m_context->iterators->app_node.variable_name;\
+auto local_name ## iter = m_context->iterators->applications_node.variable_name;\
 update_iter(local_name ## iter,\
-	m_context->state->app_node.variable_name,\
+	m_context->state->applications_node.variable_name,\
 	m_context->current_frame);\
 auto & local_name = local_name ## iter ## .item;
 
 bool VRApplicationsCursor::GetIndexForAppKey(const char *key, int *index)
 {
-	for (int i = 0; i < (int)m_context->iterators->app_node.applications.size(); i++)
+	SynchronizeChildVectors();
+	if (key == nullptr)
+	{
+		return false;
+	}
+	for (int i = 0; i < (int)m_context->iterators->applications_node.applications.size(); i++)
 	{
 		SYNC_APP_STATE(app_key, applications[i].application_key);
 		if (app_key->is_present() && strcmp(&app_key->val[0], key) == 0)
@@ -5430,12 +5478,12 @@ bool VRApplicationsCursor::GetIndexForAppKey(const char *key, int *index)
 			return true;
 		}
 	}
-	return false;
+	return false; 
 }
 
 bool VRApplicationsCursor::IsValidAppIndex(uint32_t unApplicationIndex)
 {
-	if (unApplicationIndex >= 0 && (unApplicationIndex < (int)m_context->iterators->app_node.applications.size()))
+	if (unApplicationIndex >= 0 && (unApplicationIndex < (int)m_context->iterators->applications_node.applications.size()))
 		return true;
 	else
 		return false;
@@ -5460,7 +5508,9 @@ bool VRApplicationsCursor::IsApplicationInstalled(const char * pchAppKey)
 uint32_t VRApplicationsCursor::GetApplicationCount()
 {
 	LOG_ENTRY("CppStubGetApplicationCount");
-	uint32_t rc = m_context->iterators->app_node.applications.size();
+	SynchronizeChildVectors();
+	SYNC_APP_STATE(num_applications, num_applications);
+	uint32_t rc = num_applications->val;
 	LOG_EXIT_RC(rc, "CppStubGetApplicationCount");
 }
 
@@ -5506,7 +5556,7 @@ vr::EVRApplicationError VRApplicationsCursor::GetApplicationKeyByProcessId(
 	LOG_ENTRY("CppStubGetApplicationKeyByProcessId");
 	
 	vr::EVRApplicationError rc = VRApplicationError_InvalidParameter;
-	for (int i = 0; i < (int)m_context->iterators->app_node.applications.size(); i++)
+	for (int i = 0; i < (int)m_context->iterators->applications_node.applications.size(); i++)
 	{
 		SYNC_APP_STATE(app_key, applications[i].application_key);
 		SYNC_APP_STATE(process_id, applications[i].process_id);
@@ -5554,14 +5604,19 @@ uint32_t VRApplicationsCursor::GetApplicationPropertyString(
 {
 	LOG_ENTRY("CppStubGetApplicationPropertyString");
 	
-	uint32_t rc = 0;
+	uint32_t rc = 1;	// 2/1/2017 - default is to return a 1 for empty string
+	if (unBufferSize > 0)
+	{
+		pchValue[0] = '\0';
+	}
+
 	int index;
 	if (GetIndexForAppKey(pchAppKey, &index))
 	{
 		std::vector<char, ALLOCATOR_TYPE> *p;
 		if (lookup_subtable_property(
-				m_context->state->app_node.applications[index].string_props,
-				m_context->iterators->app_node.applications[index].string_props,
+				m_context->state->applications_node.applications[index].string_props,
+				m_context->iterators->applications_node.applications[index].string_props,
 				m_context->current_frame,
 				prop_enum, &p, pError))
 		{
@@ -5582,8 +5637,8 @@ bool VRApplicationsCursor::GetApplicationPropertyBool(
 	{
 		bool *p;
 		lookup_subtable_property(
-				m_context->state->app_node.applications[index].bool_props,
-				m_context->iterators->app_node.applications[index].bool_props,
+				m_context->state->applications_node.applications[index].bool_props,
+				m_context->iterators->applications_node.applications[index].bool_props,
 				m_context->current_frame,
 			prop_enum, &p, pError);
 		rc = *p;
@@ -5603,8 +5658,8 @@ uint64_t VRApplicationsCursor::GetApplicationPropertyUint64(const char * pchAppK
 	{
 		uint64_t *p;
 		lookup_subtable_property(
-			m_context->state->app_node.applications[index].uint64_props,
-			m_context->iterators->app_node.applications[index].uint64_props,
+			m_context->state->applications_node.applications[index].uint64_props,
+			m_context->iterators->applications_node.applications[index].uint64_props,
 			m_context->current_frame,
 			prop_enum, &p, pError);
 		rc = *p;
@@ -5733,6 +5788,15 @@ bool VRApplicationsCursor::IsQuitUserPromptRequested()
 	LOG_EXIT_RC(rc, "CppStubIsQuitUserPromptRequested");
 }
 
+uint32_t VRApplicationsCursor::GetCurrentSceneProcessId()
+{
+	LOG_ENTRY("CppStubGetCurrentSceneProcessId");
+	uint32_t rc;
+	SYNC_APP_STATE(current_scene_process_id, current_scene_process_id);
+	rc = current_scene_process_id->val;
+	LOG_EXIT_RC(rc, "CppStubGetCurrentSceneProcessId");
+}
+
 class VRSettingsCursor : public VRSettingsCppStub
 {
 public:
@@ -5811,7 +5875,6 @@ if (GetIndexForSection(pchSection, &index))\
 		{\
 			rc = iter.item->val;\
 		}\
-		rc = iter.item->is_present();\
 	}\
 }
 
@@ -6869,7 +6932,7 @@ uint32_t VRRenderModelsCursor::GetRenderModelThumbnailURL(
 {
 	LOG_ENTRY("CppStubGetRenderModelThumbnailURL");
 	
-	uint32_t rc = 1;	// 1/26/2016 - default is to return a 1 for empty string
+	uint32_t rc = 1;	// 1/26/2017 - default is to return a 1 for empty string
 	if (unThumbnailURLLen > 0)
 	{
 		pchThumbnailURL[0] = '\0';

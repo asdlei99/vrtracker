@@ -58,6 +58,17 @@ struct TrackerConfig
 	float predicted_seconds_to_photon;
 };
 
+// should the tracker control write interfaces? TBD!
+// pros:
+//	* event processing could be intercepted
+//  * nearz/farz and distortion queries (ie TrackerConfig) could be intercepted
+//  * api calls could be logged automatically
+//
+// cons:
+//	* I like that the caller can control when snapshots are taken
+//  * I like that the system tries to not be dependent on tracking all the writes to capture state
+// 
+
 
 typedef void *vr_state_tracker_t;
 vr_state_tracker_t create_vr_state_tracker(TrackerConfig c = { 0.1f, 100.0f, 0.0f, 0.0f, 0.0f });

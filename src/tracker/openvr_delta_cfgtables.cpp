@@ -31,6 +31,7 @@ const app_property_row application_bool_properties_table[] =
 	EXPANDO_APP_PROPERTY_BOOLO(IsDashboardOverlay),
 	EXPANDO_APP_PROPERTY_BOOLO(IsTemplate),
 	EXPANDO_APP_PROPERTY_BOOLO(IsInstanced),
+	EXPANDO_APP_PROPERTY_BOOLO(IsInternal),
 };
 
 #define EXPANDO_APP_PROPERTY_STRINGO(x) { vr::VRApplicationProperty_ ## x ## _String, #x }
@@ -58,6 +59,9 @@ const device_property_row device_int32_properties_table[] =
 	EXPANDO_DEVICE_PROPERTY_INT32O(EdidProductID),
 	EXPANDO_DEVICE_PROPERTY_INT32O(DisplayGCType),
 	EXPANDO_DEVICE_PROPERTY_INT32O(CameraCompatibilityMode),
+	EXPANDO_DEVICE_PROPERTY_INT32O(DisplayMCImageWidth),
+	EXPANDO_DEVICE_PROPERTY_INT32O(DisplayMCImageHeight),
+	EXPANDO_DEVICE_PROPERTY_INT32O(DisplayMCImageNumChannels),
 	EXPANDO_DEVICE_PROPERTY_INT32O(Axis0Type),
 	EXPANDO_DEVICE_PROPERTY_INT32O(Axis1Type),
 	EXPANDO_DEVICE_PROPERTY_INT32O(Axis2Type),
@@ -83,6 +87,7 @@ const device_property_row device_uint64_properties_table[] =
 	EXPANDO_DEVICE_PROPERTY_UINT64O(DisplayHardwareVersion),
 	EXPANDO_DEVICE_PROPERTY_UINT64O(AudioFirmwareVersion),
 	EXPANDO_DEVICE_PROPERTY_UINT64O(SupportedButtons),
+	EXPANDO_DEVICE_PROPERTY_UINT64O(ParentDriver),
 };
 
 #define EXPANDO_DEVICE_PROPERTY_MAT34O(x) { vr::Prop_ ## x ## _Matrix34 , #x }
@@ -141,6 +146,7 @@ const device_property_row device_bool_properties_table[] =
 	EXPANDO_DEVICE_PROPERTY_BOOLO(IsOnDesktop),
 	EXPANDO_DEVICE_PROPERTY_BOOLO(DisplaySuppressed),
 	EXPANDO_DEVICE_PROPERTY_BOOLO(DisplayAllowNightMode),
+	EXPANDO_DEVICE_PROPERTY_BOOLO(UsesDriverDirectMode),
 };
 
 #define EXPANDO_DEVICE_PROPERTY_STRINGO(x) { vr::Prop_ ## x ## _String , #x }
@@ -172,6 +178,8 @@ const device_property_row device_string_properties_table[] =
 	EXPANDO_DEVICE_PROPERTY_STRINGO(NamedIconPathDeviceNotReady),
 	EXPANDO_DEVICE_PROPERTY_STRINGO(NamedIconPathDeviceStandby),
 	EXPANDO_DEVICE_PROPERTY_STRINGO(NamedIconPathDeviceAlertLow),
+	EXPANDO_DEVICE_PROPERTY_STRINGO(UserConfigPath),
+	EXPANDO_DEVICE_PROPERTY_STRINGO(InstallPath)
 };
 
 //const char* const steamvrsection_bool_settings_ary[] =
