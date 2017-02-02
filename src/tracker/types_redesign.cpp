@@ -1709,6 +1709,7 @@ struct vrschema
 			:
 			INIT(tracking_space, ETrackingUniverseOrigin),
 			INIT(frame_timing, Compositor_FrameTiming),
+			INIT(frame_timings, Compositor_FrameTiming),
 			INIT(frame_time_remaining, float),
 			INIT(cumulative_stats, Compositor_CumulativeStats),
 			INIT(foreground_fade_color, HmdColor_t),
@@ -1726,6 +1727,7 @@ struct vrschema
 
 		SDECL2(tracking_space, AlwaysAndForever, ETrackingUniverseOrigin);
 		SDECL2(frame_timing, bool, Compositor_FrameTiming);
+		VDECL2(frame_timings, AlwaysAndForever, Compositor_FrameTiming);
 		SDECL2(frame_time_remaining, AlwaysAndForever, float);
 		SDECL2(cumulative_stats, AlwaysAndForever, Compositor_CumulativeStats);
 		SDECL2(foreground_fade_color, AlwaysAndForever, HmdColor_t);
@@ -2866,11 +2868,18 @@ struct CompositorWrapper
 		: compi(compi_in), string_pool(string_pool_in)
 	{}
 
-	inline scalar_result<Compositor_FrameTiming, bool> GetFrameTiming()
+	inline scalar_result<Compositor_FrameTiming, bool> GetFrameTiming(uint32_t frames_ago)
 	{
 		scalar_result<Compositor_FrameTiming, bool> result;
-		result.result_code = compi->GetFrameTiming(&result.val);
+		result.result_code = compi->GetFrameTiming(&result.val, frames_ago);
 		return result;
+	}
+
+	inline void GetFrameTimings(uint32_t num_frames, vector_result<Compositor_FrameTiming> *timings)
+	{
+		assert((int)timings->s.max_count() >= num_frames);
+		num_frames = min(num_frames, (int)timings->s.max_count());
+		timings->count = compi->GetFrameTimings(timings->s.buf(), num_frames);
 	}
 
 	inline scalar<float> GetFrameTimeRemaining()
@@ -4016,14 +4025,15 @@ static void visit_compositor_controller(visitor_fn &visitor,
 
 template <typename visitor_fn>
 static void visit_compositor_state(visitor_fn &visitor, 
-									vrstate::compositor_schema *ss, CompositorWrapper wrap, ALLOCATOR_DECL)
+									vrstate::compositor_schema *ss, CompositorWrapper wrap, 
+									const TrackerConfig &config, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("compositor_schema", -1);
 	{
 		twrap t(" compositor_schema scalars");
 
 		LEAF_SCALAR(tracking_space, wrap.GetTrackingSpace());
-		LEAF_SCALAR(frame_timing, wrap.GetFrameTiming());
+		LEAF_SCALAR(frame_timing, wrap.GetFrameTiming(config.frame_timing_frames_ago));
 		LEAF_SCALAR(frame_time_remaining, wrap.GetFrameTimeRemaining());
 		LEAF_SCALAR(cumulative_stats, wrap.GetCumulativeStats());
 		LEAF_SCALAR(foreground_fade_color, wrap.GetForegroundFadeColor());
@@ -4036,6 +4046,18 @@ static void visit_compositor_state(visitor_fn &visitor,
 		LEAF_SCALAR(is_mirror_visible, wrap.IsMirrorWindowVisible());
 		LEAF_SCALAR(should_app_render_with_low_resource, wrap.ShouldAppRenderWithLowResources());
 	}
+
+	if (visitor.visit_openvr())
+	{
+		vector_result<Compositor_FrameTiming> frame_timings(wrap.string_pool);
+		wrap.GetFrameTimings(config.frame_timings_num_frames, &frame_timings);
+		visitor.visit_node(ss->frame_timings.item, frame_timings.s.buf(), frame_timings.count);
+	}
+	else
+	{
+		visitor.visit_node(ss->frame_timings.item);
+	}
+		
 
 	{
 		twrap t(" compositor_schema controllers");
@@ -4500,7 +4522,7 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 
 	{
 		twrap t("compositor_node");
-		visit_compositor_state(visitor, &s->compositor_node, compositor_wrapper, allocator);
+		visit_compositor_state(visitor, &s->compositor_node, compositor_wrapper, outer_state->config, allocator);
 	}
 
 	{

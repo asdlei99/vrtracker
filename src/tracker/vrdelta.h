@@ -60,6 +60,9 @@ struct TrackerConfig
 	int num_bounds_colors;
 	float collision_bounds_fade_distance;
 
+	uint32_t frame_timing_frames_ago;
+	uint32_t frame_timings_num_frames;
+
 	void set_default()
 	{
 		nearz = 0.02f;
@@ -69,6 +72,8 @@ struct TrackerConfig
 		predicted_seconds_to_photon = 0.0f;
 		num_bounds_colors = 10;
 		collision_bounds_fade_distance = 2.0f;
+		frame_timing_frames_ago = 0;
+		frame_timings_num_frames = 10;
 	}
 };
 
@@ -83,6 +88,10 @@ struct TrackerConfig
 //  * I like that the system tries to not be dependent on tracking all the writes to capture state
 // 
 
+
+// should the tracker return cursors for all interfaces?
+// NO.  sometimes I don't want the old renderstatistics.  I want to replay
+// and record new render statistics.
 
 typedef void *vr_state_tracker_t;
 vr_state_tracker_t create_vr_state_tracker(TrackerConfig c = { 0.1f, 100.0f, 0.0f, 0.0f, 0.0f });
