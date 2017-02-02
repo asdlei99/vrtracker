@@ -2871,6 +2871,8 @@ struct CompositorWrapper
 	inline scalar_result<Compositor_FrameTiming, bool> GetFrameTiming(uint32_t frames_ago)
 	{
 		scalar_result<Compositor_FrameTiming, bool> result;
+		vr::Compositor_FrameTiming *p = &result.val;
+		p->m_nSize = sizeof(vr::Compositor_FrameTiming);
 		result.result_code = compi->GetFrameTiming(&result.val, frames_ago);
 		return result;
 	}
@@ -2879,6 +2881,12 @@ struct CompositorWrapper
 	{
 		assert((int)timings->s.max_count() >= num_frames);
 		num_frames = min(num_frames, (int)timings->s.max_count());
+		vr::Compositor_FrameTiming *p = timings->s.buf();
+		for (int i = 0; i < (int)num_frames; i++)
+		{
+			p->m_nSize = sizeof(vr::Compositor_FrameTiming);
+			p++;
+		}
 		timings->count = compi->GetFrameTimings(timings->s.buf(), num_frames);
 	}
 
@@ -6385,13 +6393,14 @@ bool VRCompositorCursor::GetFrameTiming(struct vr::Compositor_FrameTiming * pTim
 
 uint32_t VRCompositorCursor::GetFrameTimings(struct vr::Compositor_FrameTiming * pTiming, uint32_t nFrames)
 {
-	LOG_ENTRY("CppStubGetFrameTimings");				// TODO: See GetFrameTiming comment above
+	LOG_ENTRY("CppStubGetFrameTimings");				// TODO/Notes: See GetFrameTiming comment above
 	uint32_t rc = 0;
-	SYNC_COMP_STATE(frame_timing, frame_timing);
-	if (pTiming && frame_timing->is_present())
+	SYNC_COMP_STATE(frame_timings, frame_timings);
+	if (pTiming && frame_timings->is_present() && frame_timings->val.size() > 0)
 	{
-		*pTiming = frame_timing->val;
-		rc = 1;
+		nFrames = min(frame_timings->val.size(), nFrames);
+		memcpy(pTiming, &frame_timings->val.at(0), sizeof(vr::Compositor_FrameTiming)*nFrames);
+		rc = nFrames;
 	}
 	LOG_EXIT_RC(rc, "CppStubGetFrameTimings");
 }

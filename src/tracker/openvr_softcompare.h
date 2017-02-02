@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include <openvr.h>
 
-inline bool softcompare_floats(float a, float b, float epsilon)
+inline bool softcompare_is_similar(float a, float b, float epsilon)
 {
 	float delta;
 	if (a > b)
@@ -76,8 +76,9 @@ done:
 }
 
 
+
 // returns true if similar
-inline bool softcompare_poses(
+inline bool softcompare_is_similar(
 	const vr::TrackedDevicePose_t &a,
 	const vr::TrackedDevicePose_t &b,
 	float epsilon = 0.0001f)
@@ -100,11 +101,11 @@ inline bool softcompare_poses(
 	{
 		for (int i = 0; i < 3 && similar; i++)
 		{
-			similar = softcompare_floats(a.vAngularVelocity.v[i], b.vAngularVelocity.v[i], epsilon);
-			similar = softcompare_floats(a.vVelocity.v[i], b.vVelocity.v[i], epsilon);
+			similar = softcompare_is_similar(a.vAngularVelocity.v[i], b.vAngularVelocity.v[i], epsilon);
+			similar = softcompare_is_similar(a.vVelocity.v[i], b.vVelocity.v[i], epsilon);
 			for (int j = 0; j < 4 && similar; j++)
 			{
-				similar = softcompare_floats(a.mDeviceToAbsoluteTracking.m[i][j],
+				similar = softcompare_is_similar(a.mDeviceToAbsoluteTracking.m[i][j],
 					b.mDeviceToAbsoluteTracking.m[i][j], epsilon);
 			}
 		}
@@ -112,7 +113,30 @@ inline bool softcompare_poses(
 	return similar;
 }
 
-inline bool softcompare_pose_arrays(
+inline bool softcompare_is_similar(const vr::Compositor_FrameTiming &a, const vr::Compositor_FrameTiming &b)
+{
+	bool similar = true;
+
+	if (a.m_nSize != b.m_nSize)
+	{
+		similar = false;
+	}
+	else if (abs((int)a.m_nFrameIndex - (int)b.m_nFrameIndex) > 100)
+	{
+		similar = false;
+	}
+	else if (a.m_nReprojectionFlags != b.m_nReprojectionFlags)
+	{
+		similar = false;
+	}
+	else if (!softcompare_is_similar(a.m_HmdPose, b.m_HmdPose))
+	{
+		similar = false;
+	}
+	return similar;
+}
+
+inline bool softcompare_is_similar(
 	const vr::TrackedDevicePose_t *a_poses,
 	const vr::TrackedDevicePose_t *b_poses,
 	int num_poses,
@@ -121,12 +145,37 @@ inline bool softcompare_pose_arrays(
 	bool similar = true;
 	for (int i = 0; i < num_poses; i++)
 	{
-		if (!softcompare_poses(a_poses[i], b_poses[i], epsilon))
+		if (!softcompare_is_similar(a_poses[i], b_poses[i], epsilon))
 		{
 			similar = false;
 			break;
 		}
 	}
+	return similar;
+}
+
+inline bool softcompare_is_similar(
+	const vr::Compositor_CumulativeStats &a,
+	const vr::Compositor_CumulativeStats &b)
+{
+	bool similar = true;
+
+	similar = similar && (a.m_nPid == b.m_nPid);
+	similar = similar && (abs((int)a.m_nNumFramePresents			- (int)b.m_nNumFramePresents ) < 5);
+	similar = similar && (abs((int)a.m_nNumDroppedFrames			- (int)b.m_nNumDroppedFrames ) < 5);
+	similar = similar && (abs((int)a.m_nNumReprojectedFrames		- (int)b.m_nNumReprojectedFrames ) < 5);
+	similar = similar && (abs((int)a.m_nNumFramePresentsOnStartup	- (int)b.m_nNumFramePresentsOnStartup) < 5);
+	similar = similar && (abs((int)a.m_nNumDroppedFramesOnStartup	- (int)b.m_nNumDroppedFramesOnStartup) < 5);
+	similar = similar && (abs((int)a.m_nNumReprojectedFramesOnStartup-(int)b.m_nNumReprojectedFramesOnStartup) < 5);
+	similar = similar && (abs((int)a.m_nNumLoading					- (int)b.m_nNumLoading) < 5);
+	similar = similar && (abs((int)a.m_nNumFramePresentsLoading		- (int)b.m_nNumFramePresentsLoading) < 5);
+	similar = similar && (abs((int)a.m_nNumDroppedFramesLoading		- (int)b.m_nNumDroppedFramesLoading) < 5);
+	similar = similar && (abs((int)a.m_nNumReprojectedFramesLoading	- (int)b.m_nNumReprojectedFramesLoading) < 5);
+	similar = similar && (abs((int)a.m_nNumTimedOut					- (int)b.m_nNumTimedOut) < 5);
+	similar = similar && (abs((int)a.m_nNumFramePresentsTimedOut	- (int)b.m_nNumFramePresentsTimedOut) < 5);
+	similar = similar && (abs((int)a.m_nNumDroppedFramesTimedOut	- (int)b.m_nNumDroppedFramesTimedOut) < 5);
+	similar = similar && (abs((int)a.m_nNumReprojectedFramesTimedOut -(int)b.m_nNumReprojectedFramesTimedOut) < 5);
+
 	return similar;
 }
 
