@@ -114,10 +114,6 @@ private:
 	openvr_broker::open_vr_interfaces m_cursor_interfaces;
 };
 
-
-
-
-
 int main()
 {
 	TrackerConfig c;
@@ -155,6 +151,253 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	ia->Refresh();
 	ib->Refresh();
 
+
+	vr::VROverlayHandle_t overlay_handle_a;
+	vr::EVROverlayError errora = a->ovi->CreateOverlay("seankey", "sean friendly name", &overlay_handle_a);
+
+	vr::EVROverlayError errora1 = a->ovi->SetHighQualityOverlay(overlay_handle_a);
+
+	vr::VROverlayHandle_t hqhandlea = a->ovi->GetHighQualityOverlay();
+	
+	char buf[256];
+	vr::EVROverlayError oerror;
+	uint32_t keyret = a->ovi->GetOverlayKey(overlay_handle_a, buf, sizeof(buf), &oerror);
+	
+	char namebuf[256];
+	vr::EVROverlayError oerror2;
+	uint32_t nameret = a->ovi->GetOverlayName(overlay_handle_a, namebuf, sizeof(namebuf), &oerror2);
+
+	uint32_t rendering_pid = a->ovi->GetOverlayRenderingPid(overlay_handle_a);
+
+	std::vector<vr::VROverlayFlags> flags = {
+		vr::VROverlayFlags_Curved,
+		vr::VROverlayFlags_RGSS4X,
+		vr::VROverlayFlags_NoDashboardTab,
+		vr::VROverlayFlags_AcceptsGamepadEvents,
+		vr::VROverlayFlags_ShowGamepadFocus,
+		vr::VROverlayFlags_SendVRScrollEvents,
+		vr::VROverlayFlags_SendVRTouchpadEvents,
+		vr::VROverlayFlags_ShowTouchPadScrollWheel,
+		vr::VROverlayFlags_TransferOwnershipToInternalProcess,
+		vr::VROverlayFlags_SideBySide_Parallel,
+		vr::VROverlayFlags_SideBySide_Crossed,
+		vr::VROverlayFlags_Panorama,
+		vr::VROverlayFlags_StereoPanorama,
+		vr::VROverlayFlags_SortWithNonSceneOverlays,
+		vr::VROverlayFlags_VisibleInDashboard
+	};
+
+	for (auto flag : flags)
+	{
+		bool enabled_a;
+		vr::EVROverlayError reta = a->ovi->GetOverlayFlag(overlay_handle_a, flag, &enabled_a);
+		if (reta == vr::VROverlayError_None)
+		{
+			dprintf("enabled_a %d\n", enabled_a);
+		}
+		
+	}
+
+	{
+		// presumably the bitflag equivalent of the above
+		uint32_t flags = 0;
+		vr::EVROverlayError rca = a->ovi->GetOverlayFlags(overlay_handle_a, &flags);
+	}
+
+
+	{
+		float red = 0.0f;
+		float green = 0.0f;
+		float blue = 0.0f;
+		vr::EVROverlayError reta = a->ovi->GetOverlayColor(overlay_handle_a, &red, &green, &blue);
+		dprintf("enabled_a\n");
+	}
+	
+	{
+		float alpha = 0;
+		vr::EVROverlayError reta = a->ovi->GetOverlayAlpha(overlay_handle_a, &alpha);
+		dprintf("enabled_a\n");
+	}
+
+	{
+		float texelaspect = 0;
+		vr::EVROverlayError reta = a->ovi->GetOverlayTexelAspect(overlay_handle_a, &texelaspect);
+		dprintf("texel\n");
+	}
+
+	{
+		uint32_t sort_order = 0;
+		vr::EVROverlayError reta = a->ovi->GetOverlaySortOrder(overlay_handle_a, &sort_order);
+		dprintf("texel\n");
+	}
+
+	{
+		float width_in_meters = 0;
+		vr::EVROverlayError reta = a->ovi->GetOverlayWidthInMeters(overlay_handle_a, &width_in_meters);
+		dprintf("texel\n");
+	}
+	
+	{
+		float MinDistanceInMeters = 0;
+		float MaxDistanceInMeters = 0;
+		vr::EVROverlayError reta = a->ovi->GetOverlayAutoCurveDistanceRangeInMeters(overlay_handle_a,
+			&MinDistanceInMeters, &MaxDistanceInMeters);
+		dprintf("texel\n");
+	}
+
+	{
+		vr::EColorSpace color_space;
+		vr::EVROverlayError reta = a->ovi->GetOverlayTextureColorSpace(overlay_handle_a, &color_space);
+		dprintf("texel\n");
+	}
+	
+
+	{
+		vr::VRTextureBounds_t texture_bounds;
+		vr::EVROverlayError reta = a->ovi->GetOverlayTextureBounds(overlay_handle_a, &texture_bounds);
+
+		dprintf("texel\n");
+	}
+
+	{
+		vr::VROverlayTransformType transform_type;
+		vr::EVROverlayError ret_a = a->ovi->GetOverlayTransformType(overlay_handle_a, &transform_type);
+		dprintf("texel\n");
+	}
+
+	{
+
+		vr::ETrackingUniverseOrigin eTrackingOrigin;
+		vr::HmdMatrix34_t			matTrackingOriginToOverlayTransform;
+		vr::EVROverlayError ret_a = a->ovi->GetOverlayTransformAbsolute(overlay_handle_a, &eTrackingOrigin, &matTrackingOriginToOverlayTransform);
+		dprintf("texel\n");
+	}
+
+	{
+		/** Sets the transform to relative to the transform of the specified tracked device. */
+		vr::TrackedDeviceIndex_t	unTrackedDevice;
+		vr::HmdMatrix34_t			matTrackedDeviceToOverlayTransform;
+		vr::EVROverlayError reta = a->ovi->GetOverlayTransformTrackedDeviceRelative(overlay_handle_a,
+									&unTrackedDevice,
+									&matTrackedDeviceToOverlayTransform);
+
+		dprintf("texel\n");
+	}
+
+	{
+		vr::TrackedDeviceIndex_t device_index;
+		char chComponentName[256];
+		vr::EVROverlayError reta = a->ovi->GetOverlayTransformTrackedDeviceComponent(
+											overlay_handle_a, &device_index, chComponentName, sizeof(chComponentName));
+		dprintf("texel\n");
+	}
+
+
+	{
+		bool rca = a->ovi->IsOverlayVisible(overlay_handle_a);
+		dprintf("texel\n");
+	}
+
+	
+	{
+		// think about these:
+
+		// 1
+		/** Get the transform in 3d space associated with a specific 2d point in the overlay's coordinate space (where 0,0 is the lower left). -Z points out of the overlay */
+		//virtual EVROverlayError GetTransformForOverlayCoordinates(VROverlayHandle_t ulOverlayHandle, ETrackingUniverseOrigin eTrackingOrigin, HmdVector2_t coordinatesInOverlay, HmdMatrix34_t *pmatTransform) = 0;
+
+		// 2
+		// virtual bool PollNextOverlayEvent(VROverlayHandle_t ulOverlayHandle, VREvent_t *pEvent, uint32_t uncbVREvent) = 0;
+
+		/** Computes the overlay-space pixel coordinates of where the ray intersects the overlay with the
+		* specified settings. Returns false if there is no intersection. */
+		// virtual bool ComputeOverlayIntersection(VROverlayHandle_t ulOverlayHandle, const VROverlayIntersectionParams_t *pParams, VROverlayIntersectionResults_t *pResults) = 0;
+
+
+	}
+
+
+	{
+		vr::VROverlayInputMethod input_method;
+		vr::EVROverlayError rca = a->ovi->GetOverlayInputMethod(overlay_handle_a, &input_method);
+		dprintf("texel\n");
+	}
+
+	
+	{
+		vr::HmdVector2_t mouse_scale;
+		vr::EVROverlayError rca = a->ovi->GetOverlayMouseScale(overlay_handle_a, &mouse_scale);
+		dprintf("texel\n");
+	}
+
+	{
+
+		bool rca = a->ovi->IsHoverTargetOverlay(overlay_handle_a);
+		dprintf("texel\n");
+
+	}
+
+	{
+		vr::VROverlayHandle_t rca = a->ovi->GetGamepadFocusOverlay();
+		dprintf("texel\n");
+	}
+
+	{
+		// need d3d ID3D11Resource for pNativeTextureRef input to use this function:
+		//
+		//virtual EVROverlayError GetOverlayTexture(VROverlayHandle_t ulOverlayHandle, void **pNativeTextureHandle, 
+		//	void *pNativeTextureRef, uint32_t *pWidth, uint32_t *pHeight, uint32_t *pNativeFormat, ETextureType *pAPIType, EColorSpace *pColorSpace, VRTextureBounds_t *pTextureBounds) = 0;
+	}
+
+
+	{
+		uint32_t widtha = 0;
+		uint32_t heighta = 0;
+		vr::EVROverlayError rca = a->ovi->GetOverlayTextureSize(overlay_handle_a, &widtha, &heighta);
+		dprintf("texel\n");
+	}
+
+	{
+		bool rca = a->ovi->IsDashboardVisible();
+		dprintf("texel\n");
+	}
+
+	{
+		bool rca = a->ovi->IsActiveDashboardOverlay(overlay_handle_a);
+		dprintf("texel\n");
+	}
+
+	{
+		/** Sets the dashboard overlay to only appear when the specified process ID has scene focus */
+		//virtual EVROverlayError SetDashboardOverlaySceneProcess(VROverlayHandle_t ulOverlayHandle, uint32_t unProcessId) = 0;
+		uint32_t process_id_a;
+		vr::EVROverlayError rca = a->ovi->GetDashboardOverlaySceneProcess(overlay_handle_a, &process_id_a);
+		dprintf("texel\n");
+	}
+
+	{
+		/** Returns the tracked device that has the laser pointer in the dashboard */
+		vr::TrackedDeviceIndex_t device_index_a = a->ovi->GetPrimaryDashboardDevice();
+		dprintf("texel\n");
+	}
+
+	{
+		char buf[256];
+		uint32_t rca = a->ovi->GetKeyboardText(buf, sizeof(buf));
+		dprintf("bla\n");
+	}
+
+
+	{
+		// get the image size
+		uint32_t width = 0;
+		uint32_t height = 0;
+		vr::EVROverlayError oerror3 = a->ovi->GetOverlayImageData(overlay_handle_a, nullptr, 0, &width, &height);
+		dprintf("bla\n");
+	}
+
+	dprintf("bla\n");
+	
 }
 
 void compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
