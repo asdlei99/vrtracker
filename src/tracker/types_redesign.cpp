@@ -1199,7 +1199,7 @@ template<typename T, typename InterfaceHandle, typename FunctionPtr, typename ..
 void query_vector_rcbool_wrinkle_form(vector_result<T, bool> *result, InterfaceHandle *ifh, FunctionPtr function_ptr, Params... params)
 {
 	// ask how big it is
-	uint32_t instance_count = 0;
+	uint32_t instance_count = 0;  // it is important that this is set to zero
 	/*bool rc =*/ (ifh->*function_ptr)(params..., nullptr, &instance_count);
 	{
 		// I don't expect the following assert to be hit, since the tmp buffer is currently 16Kb
