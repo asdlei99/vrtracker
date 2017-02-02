@@ -56,6 +56,20 @@ struct TrackerConfig
 	float distortionV;
 
 	float predicted_seconds_to_photon;
+
+	int num_bounds_colors;
+	float collision_bounds_fade_distance;
+
+	void set_default()
+	{
+		nearz = 0.02f;
+		farz = 100.0f;
+		distortionU = 0.0f;
+		distortionV = 0.0f;
+		predicted_seconds_to_photon = 0.0f;
+		num_bounds_colors = 10;
+		collision_bounds_fade_distance = 2.0f;
+	}
 };
 
 // should the tracker control write interfaces? TBD!

@@ -1653,12 +1653,16 @@ struct vrschema
 			INIT(calibration_state, ChaperoneCalibrationState),
 			INIT(play_area_size, HmdVector2_t),
 			INIT(play_area_rect, HmdQuad_t),
-			INIT(bounds_visible, bool)
+			INIT(bounds_visible, bool),
+			INIT(bounds_colors, HmdColor_t),
+			INIT(camera_color, HmdColor_t)
 		{}
 		SDECL2(calibration_state, AlwaysAndForever, ChaperoneCalibrationState);
 		SDECL2(play_area_size, bool, HmdVector2_t);
 		SDECL2(play_area_rect, bool, HmdQuad_t);
 		SDECL2(bounds_visible, AlwaysAndForever, bool);
+		VDECL2(bounds_colors, AlwaysAndForever, HmdColor_t);
+		SDECL2(camera_color, AlwaysAndForever, HmdColor_t);
 	};
 
 	struct chaperonesetup_schema
@@ -2767,6 +2771,19 @@ struct ChaperoneWrapper
 		return result;
 	}
 
+
+	inline void GetBoundsColor(vector_result<HmdColor_t>* colors,
+		int num_output_colors,
+		float fade_distance,
+		scalar<HmdColor_t> *camera_color)
+	{
+		assert((int)colors->s.max_count() >= num_output_colors);
+		num_output_colors = min(num_output_colors, (int)colors->s.max_count());
+		chapi->GetBoundsColor(colors->s.buf(), num_output_colors, fade_distance, &camera_color->val);
+		colors->count = num_output_colors;
+	}
+
+
 	IVRChaperone *chapi;
 	StringPool *string_pool;
 };
@@ -3855,7 +3872,8 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 }
 
 template <typename visitor_fn, typename T>
-static void visit_subtable(visitor_fn &visitor, vrstate::settings_schema::setting_subtable<T> &subtable, SettingsWrapper sw, const char *section_name)
+static void visit_subtable(visitor_fn &visitor, vrstate::settings_schema::setting_subtable<T> &subtable, 
+							SettingsWrapper sw, const char *section_name)
 {
 	for (auto iter = subtable.nodes.begin(); iter != subtable.nodes.end(); iter++)
 	{
@@ -3927,13 +3945,33 @@ template <typename visitor_fn>
 static void visit_chaperone_node(
 									visitor_fn &visitor, 
 									vrstate::chaperone_schema *ss,
-									ChaperoneWrapper &wrap)
+									ChaperoneWrapper &wrap,
+									const TrackerConfig &tracker_config)
 {
 	visitor.start_group_node("chaperone_schema", -1);
 		LEAF_SCALAR(calibration_state, wrap.GetCalibrationState());
 		LEAF_SCALAR(bounds_visible,   wrap.AreBoundsVisible());
 		LEAF_SCALAR(play_area_rect, wrap.GetPlayAreaRect());
 		LEAF_SCALAR(play_area_size, wrap.GetPlayAreaSize());
+
+		if (visitor.visit_openvr())
+		{
+			vector_result<HmdColor_t> colors(wrap.string_pool);
+			scalar<HmdColor_t> camera_color;
+
+			wrap.GetBoundsColor(&colors, tracker_config.num_bounds_colors, 
+						tracker_config.collision_bounds_fade_distance, 
+						&camera_color);
+
+			visitor.visit_node(ss->bounds_colors.item, colors.s.buf(), colors.count);
+			visitor.visit_node(ss->camera_color.item, camera_color);
+		}
+		else
+		{
+			visitor.visit_node(ss->bounds_colors.item);
+			visitor.visit_node(ss->camera_color.item);
+		}
+
 	visitor.end_group_node("chaperone_schema", -1);
 }
 
@@ -4452,7 +4490,7 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 
 	{
 		twrap t("chaperone_node");
-		visit_chaperone_node(visitor, &s->chaperone_node, chaperone_wrapper);
+		visit_chaperone_node(visitor, &s->chaperone_node, chaperone_wrapper, outer_state->config);
 	}
 
 	{
@@ -5944,6 +5982,7 @@ struct VRChaperoneCursor : public VRChaperoneCppStub
 	bool GetPlayAreaSize(float * pSizeX, float * pSizeZ) override;
 	bool GetPlayAreaRect(struct vr::HmdQuad_t * rect) override;
 	bool AreBoundsVisible() override;
+	void GetBoundsColor(struct vr::HmdColor_t * pOutputColorArray, int nNumOutputColors, float flCollisionBoundsFadeDistance, struct vr::HmdColor_t * pOutputCameraColor) override;
 	CursorContext *m_context;
 };
 
@@ -5997,6 +6036,37 @@ bool VRChaperoneCursor::AreBoundsVisible()
 	SYNC_CHAP_STATE(bounds_visible, bounds_visible);
 	bool rc = bounds_visible->is_present() && bounds_visible->val;
 	LOG_EXIT_RC(rc, "CppStubAreBoundsVisible");
+}
+
+void VRChaperoneCursor::GetBoundsColor(struct vr::HmdColor_t * pOutputColorArray, int nNumOutputColors,
+	float flCollisionBoundsFadeDistance, struct vr::HmdColor_t * pOutputCameraColor)
+{
+	LOG_ENTRY("CppStubGetBoundsColor");
+	if (pOutputColorArray)
+	{
+		SYNC_CHAP_STATE(bounds_colors, bounds_colors);
+		if (bounds_colors->val.size() == 0)
+		{
+			memset(pOutputColorArray, 0, sizeof(vr::HmdColor_t) * nNumOutputColors);
+		}
+		else
+		{
+			int elements_to_copy = min(nNumOutputColors, (int)bounds_colors->val.size());
+			memcpy(pOutputColorArray, &bounds_colors->val.at(0), sizeof(vr::HmdColor_t) * elements_to_copy);
+			while (elements_to_copy < nNumOutputColors)
+			{
+				pOutputColorArray[elements_to_copy++] = bounds_colors->val.back();
+			}
+		}
+	}
+
+	if (pOutputCameraColor)
+	{
+		SYNC_CHAP_STATE(camera_color, camera_color);
+		*pOutputCameraColor = camera_color->val;
+	}
+
+	LOG_EXIT("CppStubGetBoundsColor");
 }
 
 class VRChaperoneSetupCursor : public VRChaperoneSetupCppStub
