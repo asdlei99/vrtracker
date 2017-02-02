@@ -1,0 +1,8 @@
+C:/Users/sean/Downloads/pcre2-10.22/cmake-sean/CMakeFiles/pcre2-8.dir
+C:/Users/sean/Downloads/pcre2-10.22/cmake-sean/CMakeFiles/pcre2test.dir
+C:/Users/sean/Downloads/pcre2-10.22/cmake-sean/CMakeFiles/pcre2posix.dir
+C:/Users/sean/Downloads/pcre2-10.22/cmake-sean/CMakeFiles/pcre2grep.dir
+C:/Users/sean/Downloads/pcre2-10.22/cmake-sean/CMakeFiles/RUN_TESTS.dir
+C:/Users/sean/Downloads/pcre2-10.22/cmake-sean/CMakeFiles/INSTALL.dir
+C:/Users/sean/Downloads/pcre2-10.22/cmake-sean/CMakeFiles/ALL_BUILD.dir
+C:/Users/sean/Downloads/pcre2-10.22/cmake-sean/CMakeFiles/ZERO_CHECK.dir
