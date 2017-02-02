@@ -19,6 +19,63 @@ inline bool softcompare_floats(float a, float b, float epsilon)
 	}
 }
 
+inline bool softcompare_is_similar(
+	const vr::HmdColor_t &a,
+	const vr::HmdColor_t &b,
+
+	float epsilon = 0.0001f)
+{
+	bool similar = true;
+	if (fabs(a.r - b.r) > epsilon ||
+		fabs(a.g - b.g) > epsilon ||
+		fabs(a.b - b.b) > epsilon ||
+		fabs(a.a - b.a) > epsilon)
+	{
+		similar = false;
+	}
+	return similar;
+}
+
+inline bool softcompare_is_similar(
+	const vr::HmdColor_t *a,
+	const vr::HmdColor_t *b,
+	int count,
+	float epsilon = 0.0001f)
+{
+	bool similar = true;
+	for (int i = 0; i < count; i++)
+	{
+		if (!softcompare_is_similar(a[i], b[i], epsilon))
+		{ 
+			similar = false;
+			break;
+		}
+	}
+	return similar;
+}
+
+inline bool softcompare_is_similar(
+	vr::HmdMatrix34_t &a,
+	vr::HmdMatrix34_t &b,
+	float epsilon = 0.0001f)
+{
+	bool similar = true;
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			if (fabs(a.m[i][j] - b.m[i][j]) > epsilon)
+			{
+				similar = false;
+				goto done;
+			}
+		}
+	}
+done:
+	return similar;
+}
+
+
 // returns true if similar
 inline bool softcompare_poses(
 	const vr::TrackedDevicePose_t &a,
@@ -54,6 +111,25 @@ inline bool softcompare_poses(
 	}
 	return similar;
 }
+
+inline bool softcompare_pose_arrays(
+	const vr::TrackedDevicePose_t *a_poses,
+	const vr::TrackedDevicePose_t *b_poses,
+	int num_poses,
+	float epsilon = 0.0001f)
+{
+	bool similar = true;
+	for (int i = 0; i < num_poses; i++)
+	{
+		if (!softcompare_poses(a_poses[i], b_poses[i], epsilon))
+		{
+			similar = false;
+			break;
+		}
+	}
+	return similar;
+}
+
 
 // heuristic
 // return 0 for identical or a bigger number
