@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <vrdelta.h>
+#include <windows.h>
 
 #include <vector>
 #include <chrono>
@@ -155,6 +156,13 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	vr::VROverlayHandle_t overlay_handle_a;
 	vr::EVROverlayError errora = a->ovi->CreateOverlay("seankey", "sean friendly name", &overlay_handle_a);
 
+	{
+		vr::EVROverlayError errora = a->ovi->SetOverlayFromFile(overlay_handle_a, "c:\\vr_streams\\sean.png");
+		dprintf("bla");
+	}
+	
+
+
 	vr::EVROverlayError errora1 = a->ovi->SetHighQualityOverlay(overlay_handle_a);
 
 	vr::VROverlayHandle_t hqhandlea = a->ovi->GetHighQualityOverlay();
@@ -295,7 +303,28 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 
 	{
 		bool rca = a->ovi->IsOverlayVisible(overlay_handle_a);
+		
+		vr::EVROverlayError rcaa = a->ovi->ShowOverlay(overlay_handle_a);
+
+		vr::HmdMatrix34_t overlay_transform;
+		memset(&overlay_transform, 0, sizeof(overlay_transform));
+		overlay_transform.m[0][0] = 1;
+		overlay_transform.m[1][1] = 1;
+		overlay_transform.m[2][2] = 1;
+		overlay_transform.m[0][3] = 2;
+		overlay_transform.m[2][3] = 2;
+
+		
+		
+		vr::EVROverlayError xx = a->ovi->SetOverlayTransformAbsolute(
+			overlay_handle_a,
+			vr::TrackingUniverseStanding,
+			&overlay_transform);
+
 		dprintf("texel\n");
+
+		bool rcaaa = a->ovi->IsOverlayVisible(overlay_handle_a);
+		::Sleep(1000);
 	}
 
 	
@@ -353,7 +382,7 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	{
 		uint32_t widtha = 0;
 		uint32_t heighta = 0;
-		vr::EVROverlayError rca = a->ovi->GetOverlayTextureSize(overlay_handle_a, &widtha, &heighta);
+ 		vr::EVROverlayError rca = a->ovi->GetOverlayTextureSize(overlay_handle_a, &widtha, &heighta);
 		dprintf("texel\n");
 	}
 
@@ -915,9 +944,23 @@ void compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 
 	// there are race conditions in the application count
 	{
-		uint32_t counta = a->appi->GetApplicationCount();
-		uint32_t countb = b->appi->GetApplicationCount();
-		assert(counta == countb);	// this can be flakey - retry
+		bool succeeded = false;
+		for (int i = 0; i < 5; i++)
+		{
+			uint32_t counta = a->appi->GetApplicationCount();
+			uint32_t countb = b->appi->GetApplicationCount();
+			if (counta == countb)
+			{
+				succeeded = true;
+				break;
+			}
+			else
+			{
+				ia->Refresh();
+				ib->Refresh();
+			}
+		}
+		assert(succeeded);	
 	}
 
 	{
@@ -1431,6 +1474,8 @@ void compare_strange_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnd
 
 		vr::HmdMatrix34_t posea;
 		vr::HmdMatrix34_t poseb;
+		memset(&posea, 0, sizeof(posea));
+		memset(&poseb, 0, sizeof(posea));
 		bool bba = a->chapsi->GetLiveSeatedZeroPoseToRawTrackingPose(&posea);
 		bool bbb = b->chapsi->GetLiveSeatedZeroPoseToRawTrackingPose(&poseb);
 		assert(posea == poseb);
