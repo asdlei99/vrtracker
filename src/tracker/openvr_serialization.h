@@ -63,7 +63,7 @@ ENCODE(vr::EVRCompositorError);
 ENCODE(vr::ETrackedPropertyError);
 ENCODE(vr::EVRSettingsError);
 ENCODE(uint64_t);
-
+ENCODE(vr::EVROverlayError);
 
 
 template <>

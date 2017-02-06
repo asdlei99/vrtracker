@@ -159,7 +159,62 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	ia->Refresh();
 	ib->Refresh();
 
+	
+	std::vector<vr::VROverlayHandle_t> a_handles;
+	std::vector<vr::VROverlayHandle_t> b_handles;
 
+	// create overlays per TrackerConfig
+	for (int i = 0; i < c.num_overlays_to_sample; i++)
+	{
+		vr::VROverlayHandle_t overlay_handle_a;
+		std::string friendly_name = std::string(c.overlay_keys_to_sample[i]) + "friendly";
+		vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_a);
+
+		vr::VROverlayHandle_t overlay_handle_b;
+		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_b);
+
+		assert(errora == errorb);
+		a_handles.push_back(overlay_handle_a);
+		b_handles.push_back(overlay_handle_b);
+	}
+
+	// check that the handles can find their keys
+	ia->Refresh();
+	ib->Refresh();
+
+	for (int i = 0; i < c.num_overlays_to_sample; i++)
+	{
+		char szbufa[256];
+		vr::EVROverlayError erra;
+		uint32_t a_ret = a->ovi->GetOverlayKey(a_handles[i], szbufa, sizeof(szbufa), &erra);
+
+		char szbufb[256];
+		vr::EVROverlayError errb;
+		uint32_t b_ret = b->ovi->GetOverlayKey(b_handles[i], szbufb, sizeof(szbufb), &errb);
+
+		assert(erra == errb);
+		assert(strcmp(szbufa, szbufb) == 0);
+		assert(a_ret == b_ret);
+	}
+
+	// check they can find their names
+	for (int i = 0; i < c.num_overlays_to_sample; i++)
+	{
+		char szbufa[256];
+		vr::EVROverlayError erra;
+		uint32_t a_ret = a->ovi->GetOverlayName(a_handles[i], szbufa, sizeof(szbufa), &erra);
+
+		char szbufb[256];
+		vr::EVROverlayError errb;
+		uint32_t b_ret = b->ovi->GetOverlayName(b_handles[i], szbufb, sizeof(szbufb), &errb);
+
+		assert(erra == errb);
+		assert(strcmp(szbufa, szbufb) == 0);
+		assert(a_ret == b_ret);
+	}
+
+
+#if 0
 	vr::VROverlayHandle_t overlay_handle_a;
 	vr::EVROverlayError errora = a->ovi->CreateOverlay("seankey", "sean friendly name", &overlay_handle_a);
 
@@ -471,6 +526,7 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	}
 
 	dprintf("bla\n");
+#endif
 	
 }
 
