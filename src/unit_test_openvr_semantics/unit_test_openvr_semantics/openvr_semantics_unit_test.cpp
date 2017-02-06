@@ -115,10 +115,17 @@ private:
 	openvr_broker::open_vr_interfaces m_cursor_interfaces;
 };
 
+const char *overlay_keys[] = {
+	 "a","b","c"
+};
+
 int main()
 {
 	TrackerConfig c;
 	c.set_default();
+	c.num_overlays_to_sample = 3;
+	c.overlay_keys_to_sample = overlay_keys;
+	
 
 	RawInterface raw;
 	raw.Init();
@@ -155,6 +162,24 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 
 	vr::VROverlayHandle_t overlay_handle_a;
 	vr::EVROverlayError errora = a->ovi->CreateOverlay("seankey", "sean friendly name", &overlay_handle_a);
+
+	{
+		// try creating a dashboard overlay
+		vr::VROverlayHandle_t dash_handle, thumb_handle;
+		vr::EVROverlayError err = a->ovi->CreateDashboardOverlay(
+			"seankey",
+			"friendly",
+			&dash_handle,
+			&thumb_handle);
+
+		a->ovi->ShowDashboard("seankey");
+
+
+		dprintf("bla");
+	}
+
+
+	
 
 	{
 		vr::EVROverlayError errora = a->ovi->SetOverlayFromFile(overlay_handle_a, "c:\\vr_streams\\sean.png");
@@ -311,8 +336,10 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 		overlay_transform.m[0][0] = 1;
 		overlay_transform.m[1][1] = 1;
 		overlay_transform.m[2][2] = 1;
-		overlay_transform.m[0][3] = 2;
+		overlay_transform.m[0][3] = 0;
+		overlay_transform.m[0][3] = 1;
 		overlay_transform.m[2][3] = 2;
+
 
 		
 		
@@ -322,6 +349,24 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 			&overlay_transform);
 
 		dprintf("texel\n");
+
+
+		vr::EVROverlayError yy = a->ovi->SetOverlayInputMethod(overlay_handle_a, vr::VROverlayInputMethod_Mouse);
+
+		
+
+		while (1)
+		{
+			bool yyb = a->ovi->HandleControllerOverlayInteractionAsMouse(overlay_handle_a, 3);
+			if (yyb == true)
+			{
+				vr::VREvent_t overlay_event;
+				while (a->ovi->PollNextOverlayEvent(overlay_handle_a, &overlay_event, sizeof(overlay_event)))
+				{
+					dprintf("%s\n", openvr_string::to_string(overlay_event).c_str());
+				}
+			}
+		}
 
 		bool rcaaa = a->ovi->IsOverlayVisible(overlay_handle_a);
 		::Sleep(1000);

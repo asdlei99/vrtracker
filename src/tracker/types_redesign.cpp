@@ -1317,6 +1317,9 @@ struct HistoryVectorNodeOrIterator<T, P, false> : HistoryNode
 	node_type item;
 };
 
+
+class OverlayHelper;
+
 template <bool bIsIterator>
 struct vrschema
 {
@@ -1766,15 +1769,19 @@ struct vrschema
 			:
 			INIT(primary_dashboard_device, TrackedDeviceIndex_t),
 			INIT(is_dashboard_visible, bool),
-			overlays(allocator)
+			INIT(active_overlay_indexes, int),
+			overlays(allocator),
+			overlay_helper(nullptr)
 		{}
 
 		SDECL2(primary_dashboard_device, AlwaysAndForever, TrackedDeviceIndex_t);
 		SDECL2(is_dashboard_visible, AlwaysAndForever, bool);
+		VDECL2(active_overlay_indexes, AlwaysAndForever, int);
 
-		// 0 overlays if no GetGamepadFocusOverlay
-		// else 1 overlay_schema
+		
 		std::vector<per_overlay_state, ALLOCATOR_TYPE> overlays;
+
+		OverlayHelper *overlay_helper;
 	};
 
 	struct rendermodel_component_schema
@@ -3276,6 +3283,47 @@ struct TrackedCameraWrapper
 };
 
 
+struct TrackerConfigInternal
+{
+	TrackerConfigInternal(const TrackerConfig &c, ALLOCATOR_DECL)
+		: m_overlay_keys(allocator)
+	{
+		nearz = c.nearz;
+		farz = c.farz;
+		distortionU = c.distortionU;
+		distortionV = c.distortionV;
+		predicted_seconds_to_photon = c.predicted_seconds_to_photon;
+		num_bounds_colors = c.num_bounds_colors;
+		collision_bounds_fade_distance = c.collision_bounds_fade_distance;
+		frame_timing_frames_ago = c.frame_timing_frames_ago;
+		frame_timing_frames_ago = c.frame_timings_num_frames;
+
+		for (int i = 0; i < c.num_overlays_to_sample; i++)
+		{
+			m_overlay_keys.emplace_back(allocator);
+		}
+		for (int i = 0; i < c.num_overlays_to_sample; i++)
+		{
+			m_overlay_keys[i].assign(c.overlay_keys_to_sample[i]);
+		}
+	}
+
+	float nearz;
+	float farz;
+
+	float distortionU;
+	float distortionV;
+
+	float predicted_seconds_to_photon;
+
+	int num_bounds_colors;
+	float collision_bounds_fade_distance;
+
+	uint32_t frame_timing_frames_ago;
+	uint32_t frame_timings_num_frames;
+
+	std::vector<std::basic_string<char, std::char_traits<char>, ALLOCATOR_TYPE>, ALLOCATOR_TYPE> m_overlay_keys;
+};
 
 
 #define START_VECTOR(vector_name) \
@@ -3452,7 +3500,7 @@ static void visit_eye_state(visitor_fn &visitor,
 							vrstate::eye_schema *ss, 
 							vr::EVREye eEye, 
 							IVRSystem *sysi, SystemWrapper wrap,
-							const TrackerConfig &c,
+							const TrackerConfigInternal &c,
 							ALLOCATOR_DECL)
 {
 	visitor.start_group_node("eye", eEye);
@@ -3630,7 +3678,7 @@ static void visit_system_node(
 								vrstate::system_schema *ss, 
 								IVRSystem *sysi, SystemWrapper sysw, 
 								RenderModelWrapper rmw, 
-								const TrackerConfig &tracker_config,
+								const TrackerConfigInternal &tracker_config,
 								ALLOCATOR_DECL)
 {
 	visitor.start_group_node("system", -1);
@@ -3963,7 +4011,7 @@ static void visit_chaperone_node(
 									visitor_fn &visitor, 
 									vrstate::chaperone_schema *ss,
 									ChaperoneWrapper &wrap,
-									const TrackerConfig &tracker_config)
+									const TrackerConfigInternal &tracker_config)
 {
 	visitor.start_group_node("chaperone_schema", -1);
 		LEAF_SCALAR(calibration_state, wrap.GetCalibrationState());
@@ -4034,7 +4082,7 @@ static void visit_compositor_controller(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_compositor_state(visitor_fn &visitor, 
 									vrstate::compositor_schema *ss, CompositorWrapper wrap, 
-									const TrackerConfig &config, ALLOCATOR_DECL)
+									const TrackerConfigInternal &config, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("compositor_schema", -1);
 	{
@@ -4221,28 +4269,132 @@ static void visit_rendermodel(visitor_fn &visitor,
 }
 
 template <typename visitor_fn>
-static void visit_per_overlay(visitor_fn &visitor, vrstate::overlay_schema *ss, OverlayWrapper rmw, ALLOCATOR_DECL, VROverlayHandle_t overlay_schema)
+static void visit_per_overlay(
+	visitor_fn &visitor, 
+	vrstate::overlay_schema *ss, 
+	OverlayWrapper rmw, 
+	uint32_t overlay_index,
+	ALLOCATOR_DECL)
 {
+
 }
 
+class OverlayHelper
+{
+public:
+	void update_active_indexes(std::vector<int> *active_indexes, OverlayWrapper &ow, const TrackerConfigInternal &config)
+	{
+		update_based_on_tracker_config(active_indexes, ow, config);
+		update_based_on_handles(active_indexes, ow);
+	}
+
+	int get_num_overlays() const
+	{
+		return overlay_keys.size();
+	}
+
+private:
+	// return an index.  if the key doesn't exist yet add it.
+	int get_overlay_index_for_key(const std::string &key)
+	{	
+		int rc;
+		auto iter = overlay_keys2index.find(key);
+		if (iter != overlay_keys2index.end())
+		{
+			rc = iter->second;
+		}
+		else
+		{
+			overlay_keys.push_back(key);
+			rc = overlay_keys.size() - 1;
+			overlay_keys2index.insert(iter, { key, rc });
+		}
+		return rc;
+	}
+
+	void update_based_on_tracker_config(std::vector<int> *active_indexes, OverlayWrapper &ow, const TrackerConfigInternal &config)
+	{
+		for (int i = 0; i < (int)config.m_overlay_keys.size(); i++)
+		{
+			vr::VROverlayHandle_t handle;
+			vr::EVROverlayError e = ow.ovi->FindOverlay(config.m_overlay_keys[i].c_str(), &handle);
+			if (e == vr::VROverlayError_None)
+			{
+				// this overlay is active.
+				// lookup it's index
+				std::string bla(config.m_overlay_keys[i].c_str());				// TODO this copy is stupid
+				int index = get_overlay_index_for_key(bla);
+				active_indexes->push_back(index);
+			}
+		}
+	}
+
+	void update_based_on_handles(std::vector<int> *active_indexes, OverlayWrapper &ow)
+	{
+		// check GetHighQualityOverlay() and GetGamepadFocusOverlay()
+		VROverlayHandle_t harray[2];
+		harray[0] = ow.ovi->GetHighQualityOverlay();
+		harray[1] = ow.ovi->GetGamepadFocusOverlay();
+		for (int i = 0; i < 2; i++)
+		{
+			VROverlayHandle_t h = harray[i];
+			if (h != vr::k_ulOverlayHandleInvalid)
+			{
+				char key[vr::k_unVROverlayMaxKeyLength];
+				vr::VROverlayError e;
+				ow.ovi->GetOverlayKey(h, key, sizeof(key), &e);
+				if (e != vr::k_ulOverlayHandleInvalid)
+				{
+					std::string bla(key);									// This copy is stupid too
+					int index = get_overlay_index_for_key(bla);
+					active_indexes->push_back(index);
+				}
+			}
+		}
+	}
+
+	std::vector<std::string> overlay_keys;
+	std::unordered_map<std::string, int> overlay_keys2index;
+};
+
 template <typename visitor_fn>
-static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss, OverlayWrapper ow, ALLOCATOR_DECL)
+static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss, 
+								OverlayWrapper ow, 
+								const TrackerConfigInternal &config,
+								ALLOCATOR_DECL)
 {
 	LEAF_SCALAR(primary_dashboard_device, ow.GetPrimaryDashboardDevice());
-	ss->overlays.reserve(1);
-	vr::VROverlayHandle_t gameplay_overlay = 0;
+
 	if (visitor.visit_openvr())
 	{
-		gameplay_overlay = ow.GetGamepadFocusOverlay().val;
-		while (gameplay_overlay && ss->overlays.size() < 1)
+		std::vector<int> active_indexes;
+		if (!ss->overlay_helper)
+		{
+			ss->overlay_helper = new OverlayHelper();
+		}
+		ss->overlay_helper->update_active_indexes(&active_indexes, ow, config);
+		visitor.visit_node(ss->active_overlay_indexes.item, &active_indexes.at(0), active_indexes.size());
+	}
+	else
+	{
+		visitor.visit_node(ss->active_overlay_indexes.item);
+	}
+
+	if (ss->overlay_helper && ss->overlay_helper->get_num_overlays() > (int)ss->overlays.size())
+	{
+		ss->overlays.reserve(ss->overlay_helper->get_num_overlays());
+		while ((int)ss->overlays.size() < ss->overlay_helper->get_num_overlays())
 		{
 			ss->overlays.emplace_back(allocator);
 		}
 	}
+
+	// history traversal always goes through the complete set
+	// see "How to track applications and overlays.docx"
 	START_VECTOR(overlays);
 	for (int i = 0; i < (int)ss->overlays.size(); i++)
 	{
-		visit_per_overlay(visitor, ss, ow, allocator, gameplay_overlay);
+		visit_per_overlay(visitor, ss, ow, i,  allocator);
 	}
 	END_VECTOR(overlays);
 }
@@ -4298,7 +4450,7 @@ static void visit_cameraframetype_schema(visitor_fn &visitor,
 	vrstate::cameraframetype_schema *ss, TrackedCameraWrapper tcw,
 	int device_index, 
 	EVRTrackedCameraFrameType frame_type,
-	const TrackerConfig &config)
+	const TrackerConfigInternal &config)
 {
 	visitor.start_group_node(FrameTypeToGroupName(frame_type),-1);
 
@@ -4320,7 +4472,7 @@ static void visit_cameraframetype_schema(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_per_controller_state(visitor_fn &visitor, 
 		vrstate::trackedcamera_schema::controller_camera_schema *ss, TrackedCameraWrapper tcw, 
-		int device_index, const TrackerConfig &tracker_config, ALLOCATOR_DECL)
+		int device_index, const TrackerConfigInternal &tracker_config, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("controller", device_index);
 	LEAF_SCALAR(has_camera, tcw.HasCamera(device_index));
@@ -4344,7 +4496,7 @@ static void visit_per_controller_state(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_trackedcamera_state(visitor_fn &visitor, 
 									vrstate::trackedcamera_schema *ss, TrackedCameraWrapper tcw, 
-									const TrackerConfig &tracker_config,
+									const TrackerConfigInternal &tracker_config,
 									ALLOCATOR_DECL)
 {
 	visitor.start_group_node("camera", -1);
@@ -4442,6 +4594,8 @@ struct save_summary
 	char date_string[64];
 };
 
+
+
 //
 // the root of all vr state
 //
@@ -4458,19 +4612,21 @@ struct tracker
 	int non_blocking_update_calls;
 	save_summary save_info;
 	
-	TrackerConfig config;
+	TrackerConfigInternal config;	// save and restore from file.  walk quickly.  future: add and remove
+	
 	vrstate m_state;
 	
 	std::forward_list<FrameNumberedEvent, ALLOCATOR_TYPE>  m_events;
 	std::forward_list<int64_t, ALLOCATOR_TYPE>  m_timestamps;
 
-	tracker(slab *slab)
+	tracker(slab *slab, const TrackerConfig &c)
 		:
 		m_slab(slab),
 		m_allocator(slab),
 		m_frame_number(0),
 		blocking_update_calls(0),
 		non_blocking_update_calls(0),
+		config(c, m_allocator),
 		m_state(m_allocator),
 		m_events(m_allocator),
 		m_timestamps(m_allocator)
@@ -4535,7 +4691,7 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 
 	{
 		twrap t("overlay_node");
-		visit_overlay_state(visitor, &s->overlay_node, overlay_wrapper, allocator);
+		visit_overlay_state(visitor, &s->overlay_node, overlay_wrapper, outer_state->config, allocator);
 	}
 	
 	{
@@ -4587,8 +4743,7 @@ vr_state_tracker_t create_vr_state_tracker(TrackerConfig c)
 {
 	slab *the_slab = new slab(8 * 1024 * 1024);	// textures can be > 4MB 
 	void *some_space_for_vrstate = the_slab->slab_alloc(sizeof(tracker));
-	tracker *ret = new(some_space_for_vrstate)tracker(the_slab); // everyone is setup and pointing into the slab
-	ret->config = c;
+	tracker *ret = new(some_space_for_vrstate)tracker(the_slab, c); // everyone is setup and pointing into the slab
 	return ret;
 }
 

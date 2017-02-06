@@ -63,6 +63,9 @@ struct TrackerConfig
 	uint32_t frame_timing_frames_ago;
 	uint32_t frame_timings_num_frames;
 
+	int num_overlays_to_sample;
+	const char **overlay_keys_to_sample;
+
 	void set_default()
 	{
 		nearz = 0.02f;
@@ -74,6 +77,9 @@ struct TrackerConfig
 		collision_bounds_fade_distance = 2.0f;
 		frame_timing_frames_ago = 0;
 		frame_timings_num_frames = 10;
+
+		num_overlays_to_sample = 0;
+		overlay_keys_to_sample = nullptr;
 	}
 };
 
