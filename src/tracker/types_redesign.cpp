@@ -167,6 +167,11 @@ template <> struct PresenceValue <EVRApplicationError>
 	static const bool is_present = VRApplicationError_None;
 };
 
+template <> struct PresenceValue <EVROverlayError>
+{
+	static const bool is_present = VROverlayError_None;
+};
+
 template <typename T, typename U>
 struct stringifier
 {
@@ -3303,7 +3308,7 @@ struct TrackerConfigInternal
 		num_bounds_colors = c.num_bounds_colors;
 		collision_bounds_fade_distance = c.collision_bounds_fade_distance;
 		frame_timing_frames_ago = c.frame_timing_frames_ago;
-		frame_timing_frames_ago = c.frame_timings_num_frames;
+		frame_timings_num_frames = c.frame_timings_num_frames;
 
 		for (int i = 0; i < c.num_overlays_to_sample; i++)
 		{
@@ -4422,7 +4427,13 @@ static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss
 			ss->overlay_helper = new OverlayHelper();
 		}
 		ss->overlay_helper->update_active_indexes(&active_indexes, ow, config);
-		visitor.visit_node(ss->active_overlay_indexes.item, &active_indexes.at(0), active_indexes.size());
+
+		int *ptr = nullptr;
+		if (active_indexes.size() > 0)
+		{
+			ptr = &active_indexes.at(0);
+		}
+		visitor.visit_node(ss->active_overlay_indexes.item, ptr, active_indexes.size());
 	}
 	else
 	{
@@ -6745,19 +6756,30 @@ public:
 		state_ref(m_context->state->overlay_node),
 		iter_ref(m_context->iterators->overlay_node)
 	{
-	//	SynchronizeChildVectors();
+		SynchronizeChildVectors();
 	}
+
+	void SynchronizeChildVectors()
+	{
+		while (iter_ref.overlays.size() < state_ref.overlays.size())
+		{
+			iter_ref.overlays.emplace_back(m_context->m_allocator);
+		}
+	}
+
+	vr::EVROverlayError GetOverlayIndexForHandle(vr::VROverlayHandle_t ulOverlayHandle, int *index);
 
 	vr::TrackedDeviceIndex_t GetPrimaryDashboardDevice() override;
 	bool IsDashboardVisible() override;
 	
 	EVROverlayError FindOverlay(const char *pchOverlayKey, VROverlayHandle_t * pOverlayHandle) override;
 	uint32_t GetOverlayKey(vr::VROverlayHandle_t ulOverlayHandle, char * pchValue, uint32_t unBufferSize, vr::EVROverlayError * pError) override;
-
+	uint32_t GetOverlayName(vr::VROverlayHandle_t ulOverlayHandle, char * pchValue, uint32_t unBufferSize, vr::EVROverlayError * pError) override;
 
 };
 
 #define SYNC_OVERLAY_STATE(local_name, variable_name) \
+SynchronizeChildVectors();\
 auto local_name ## iter = iter_ref.variable_name;\
 update_iter(local_name ## iter,\
 	state_ref.variable_name,\
@@ -6788,6 +6810,12 @@ vr::EVROverlayError VROverlayCursor::FindOverlay(const char *pchOverlayKey, VROv
 	vr::EVROverlayError rc = VROverlayError_UnknownOverlay;
 	OverlayHelper *h = state_ref.overlay_helper;
 
+	// regardless of result, pOverlayHandle is set 2/6/2017
+	if (pOverlayHandle)
+	{
+		*pOverlayHandle = 0;
+	}
+
 	int index = h->get_index_for_key(pchOverlayKey);			// find index
 	if (index >= 0)
 	{
@@ -6805,30 +6833,73 @@ vr::EVROverlayError VROverlayCursor::FindOverlay(const char *pchOverlayKey, VROv
 	return rc;
 }
 
-uint32_t VROverlayCursor::GetOverlayKey(vr::VROverlayHandle_t ulOverlayHandle, char * pchValue, uint32_t unBufferSize, vr::EVROverlayError * pError)
+
+vr::EVROverlayError 
+VROverlayCursor::GetOverlayIndexForHandle(vr::VROverlayHandle_t ulOverlayHandle, int *index_ret)
 {
-	LOG_ENTRY("CppStubGetOverlayKey");
-
-	uint32_t rc = 0;
-
+	bool found_it = false;
 	OverlayHelper *h = state_ref.overlay_helper;
 	SYNC_OVERLAY_STATE(active_overlay_indexes, active_overlay_indexes);	// what overlays are currently present
+
 	for (auto iter = active_overlay_indexes->val.begin(); iter != active_overlay_indexes->val.end(); iter++)
 	{
 		int index = *iter;
-		SYNC_OVERLAY_STATE(handle, overlays[index].overlay_handle);	
+		SYNC_OVERLAY_STATE(handle, overlays[index].overlay_handle);
 		if (handle->is_present())
 		{
 			if (handle->val == ulOverlayHandle)
 			{
-				SYNC_OVERLAY_STATE(key, overlays[index].overlay_key);
-				util_vector_to_return_buf_rc(&key->val, pchValue, unBufferSize, &rc);
+				*index_ret = index;
+				found_it = true;
 			}
 		}
 	}
+	vr::EVROverlayError rc;
+	if (found_it)
+	{		
+		rc = vr::VROverlayError_None;
+	}
+	else
+	{
+		rc = vr::VROverlayError_InvalidHandle;	// 2/6/2017: this is what's returned for non existant handles
+	}
+	return rc;
+}
 
+#define LOOKUP_OVERLAY_STRING(VAR_NAME)\
+int index;\
+vr::EVROverlayError found_it = GetOverlayIndexForHandle(ulOverlayHandle, &index);\
+uint32_t rc = 0;\
+\
+if (found_it == vr::VROverlayError_None)\
+{\
+	SYNC_OVERLAY_STATE(key, overlays[index].VAR_NAME);\
+	util_vector_to_return_buf_rc(&key->val, pchValue, unBufferSize, &rc);\
+}\
+\
+if (pError)\
+{\
+	*pError = found_it;\
+}
+
+uint32_t VROverlayCursor::GetOverlayKey(vr::VROverlayHandle_t ulOverlayHandle, char * pchValue, uint32_t unBufferSize, vr::EVROverlayError * pError)
+{
+	LOG_ENTRY("CppStubGetOverlayKey");
+
+	LOOKUP_OVERLAY_STRING(overlay_key);
+	
 	LOG_EXIT_RC(rc, "CppStubGetOverlayKey");
 }
+
+uint32_t VROverlayCursor::GetOverlayName(vr::VROverlayHandle_t ulOverlayHandle, char * pchValue, uint32_t unBufferSize, vr::EVROverlayError * pError)
+{
+	LOG_ENTRY("CppStubGetOverlayName");
+
+	LOOKUP_OVERLAY_STRING(overlay_name);
+
+	LOG_EXIT_RC(rc, "CppStubGetOverlayName");
+}
+
 
 class VRRenderModelsCursor : public VRRenderModelsCppStub
 {

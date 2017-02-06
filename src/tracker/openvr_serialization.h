@@ -45,8 +45,6 @@ struct EncodeStream
 	
 };
 
-
-
 // don't define this or pay the price of crazy (implicit) encodings!
 template <typename T>
 static void encode(T v, EncodeStream &e);
@@ -64,7 +62,6 @@ ENCODE(vr::ETrackedPropertyError);
 ENCODE(vr::EVRSettingsError);
 ENCODE(uint64_t);
 ENCODE(vr::EVROverlayError);
-
 
 template <>
 static void encode<const char *>(const char *v, EncodeStream &e)

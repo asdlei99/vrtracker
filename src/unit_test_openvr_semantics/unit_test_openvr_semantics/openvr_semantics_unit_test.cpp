@@ -160,8 +160,7 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	ib->Refresh();
 
 	
-	std::vector<vr::VROverlayHandle_t> a_handles;
-	std::vector<vr::VROverlayHandle_t> b_handles;
+	
 
 	// create overlays per TrackerConfig
 	for (int i = 0; i < c.num_overlays_to_sample; i++)
@@ -174,13 +173,33 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_b);
 
 		assert(errora == errorb);
-		a_handles.push_back(overlay_handle_a);
-		b_handles.push_back(overlay_handle_b);
+		
 	}
 
 	// check that the handles can find their keys
+
 	ia->Refresh();
 	ib->Refresh();
+
+	std::vector<vr::VROverlayHandle_t> a_handles;
+	std::vector<vr::VROverlayHandle_t> b_handles;
+
+	// find handles for keys
+	for (int i = 0; i < c.num_overlays_to_sample; i++)
+	{
+		vr::VROverlayHandle_t overlay_handle_a;
+		vr::EVROverlayError errora = a->ovi->FindOverlay(c.overlay_keys_to_sample[i], &overlay_handle_a);
+
+		vr::VROverlayHandle_t overlay_handle_b;
+		vr::EVROverlayError errorb = b->ovi->FindOverlay(c.overlay_keys_to_sample[i], &overlay_handle_b);
+
+		a_handles.push_back(overlay_handle_a);
+		b_handles.push_back(overlay_handle_b);
+
+		assert(errora == errorb);
+		assert(overlay_handle_a == overlay_handle_b);
+	}
+	
 
 	for (int i = 0; i < c.num_overlays_to_sample; i++)
 	{
@@ -196,6 +215,83 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 		assert(strcmp(szbufa, szbufb) == 0);
 		assert(a_ret == b_ret);
 	}
+
+	// try an invalid handle 0x22 - expect error code
+	{
+		char szbufa[256];
+		vr::EVROverlayError erra;
+		uint32_t a_ret = a->ovi->GetOverlayKey(0x22, szbufa, sizeof(szbufa), &erra);
+
+		char szbufb[256];
+		vr::EVROverlayError errb;
+		uint32_t b_ret = b->ovi->GetOverlayKey(0x22, szbufb, sizeof(szbufb), &errb);
+		assert(erra != vr::VROverlayError_None);
+		assert(errb != vr::VROverlayError_None);
+		assert(erra == errb);	// strict mode
+		assert(a_ret == b_ret);
+
+	}
+
+	// try an invalid name - expect error code
+	{
+		vr::VROverlayHandle_t overlay_handle_a;
+		vr::EVROverlayError errora = a->ovi->FindOverlay("invalid", &overlay_handle_a);
+
+		vr::VROverlayHandle_t overlay_handle_b;
+		vr::EVROverlayError errorb = b->ovi->FindOverlay("invalid", &overlay_handle_b);
+
+		assert(errora == errorb);
+		assert(overlay_handle_a == overlay_handle_b);
+	}
+
+	// try deleting an existing handle ('a') and query - expect error code
+	{
+		vr::EVROverlayError destroyerrora = a->ovi->DestroyOverlay(a_handles[0]);
+		char szbufa[256];
+		vr::EVROverlayError queryerra;
+		uint32_t a_ret = a->ovi->GetOverlayKey(a_handles[0], szbufa, sizeof(szbufa), &queryerra); // should be invalid
+
+		vr::EVROverlayError destroyerrorb = b->ovi->DestroyOverlay(b_handles[0]);
+
+		ia->Refresh();			// give b a chance to notice it's gone
+		ib->Refresh();
+
+		char szbufb[256];
+		vr::EVROverlayError queryerrb;
+		uint32_t b_ret = b->ovi->GetOverlayKey(b_handles[0], szbufb, sizeof(szbufb), &queryerrb); // should be invalid
+		assert(a_ret == b_ret);
+		assert(queryerra == queryerrb);
+
+		
+	}
+
+	{
+		// add it back in
+		vr::VROverlayHandle_t overlay_handle_a;
+		vr::VROverlayHandle_t overlay_handle_b;
+		std::string friendly_name = std::string(c.overlay_keys_to_sample[0]) + "friendly";
+		vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys_to_sample[0], friendly_name.c_str(), &overlay_handle_a);
+		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[0], friendly_name.c_str(), &overlay_handle_b);
+		assert(errora == errorb);
+
+
+		vr::VROverlayHandle_t found_overlay_handle_a;
+		vr::EVROverlayError found_errora = a->ovi->FindOverlay(c.overlay_keys_to_sample[0], &found_overlay_handle_a);
+
+		// give b a chance to detect the new overlay
+		ia->Refresh();
+		ib->Refresh();
+
+		vr::VROverlayHandle_t found_overlay_handle_b;
+		vr::EVROverlayError found_errorb = b->ovi->FindOverlay(c.overlay_keys_to_sample[0], &found_overlay_handle_b);
+		assert(found_errora == found_errorb);
+		assert(found_overlay_handle_a == found_overlay_handle_b);
+
+		a_handles[0] = found_overlay_handle_a;
+		b_handles[0] = found_overlay_handle_b;
+	}
+
+
 
 	// check they can find their names
 	for (int i = 0; i < c.num_overlays_to_sample; i++)
@@ -998,30 +1094,42 @@ void compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 		// change it
 		float new_val = fa + 1.0f;
 
-		a->seti->SetFloat(vr::k_pch_SteamVR_Section, key, new_val, &errora);
-		b->seti->SetFloat(vr::k_pch_SteamVR_Section, key, new_val, &errorb);	// writes to stub
-		assert(errora == errorb);
-
+		vr::EVRSettingsError write1errora;
+		vr::EVRSettingsError write1errorb;
+		a->seti->SetFloat(vr::k_pch_SteamVR_Section, key, new_val, &write1errora);
+		b->seti->SetFloat(vr::k_pch_SteamVR_Section, key, new_val, &write1errorb);	// writes to stub
 		ia->Refresh();
 		ib->Refresh();
-
 		// read it again
-		float fa2 = a->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &errora);
-		float fb2 = b->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &errorb);	// reads from snapshot of a
-		assert(errora == errorb);
-		assert(fa2 == fb2);
-		assert(fa2 == new_val);
+		vr::EVRSettingsError read1errora;
+		vr::EVRSettingsError read1errorb;
+		float fa1 = a->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read1errora);
+		float fb1 = b->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read1errorb);	// reads from snapshot of a
+
 
 		// write the old version back
-		a->seti->SetFloat(vr::k_pch_SteamVR_Section, key, fa, &errora);
-		b->seti->SetFloat(vr::k_pch_SteamVR_Section, key, fa, &errorb);	// writes to stub
-
+		vr::EVRSettingsError write2errora;
+		vr::EVRSettingsError write2errorb;
+		a->seti->SetFloat(vr::k_pch_SteamVR_Section, key, fa, &write2errora);
+		b->seti->SetFloat(vr::k_pch_SteamVR_Section, key, fa, &write2errorb);	// writes to stub
 		ia->Refresh();
 		ib->Refresh();
 
+		vr::EVRSettingsError read2errora;
+		vr::EVRSettingsError read2errorb;
 		// check it again
-		float finala = a->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &errora);	
-		float finalb = b->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &errorb);	// reads from snapshot of a
+		float finala = a->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read2errora);	
+		float finalb = b->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read2errorb);	// reads from snapshot of a
+
+		assert(write1errora == write1errorb);
+		assert(read1errora == read1errorb);
+		assert(read1errora == read1errorb);
+		assert(fa1 == fb1);
+		assert(fa1 == new_val);
+
+		assert(write2errora == write2errorb);
+		assert(read2errora == read2errorb);
+
 		assert(finala == finalb);
 		assert(finala == fa);
 	}

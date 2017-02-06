@@ -549,6 +549,7 @@ uint32_t VRApplicationsCppStub::GetApplicationPropertyString(const char * pchApp
 {
 	LOG_ENTRY("CppStubGetApplicationPropertyString");
 	static uint32_t rc = 0;
+	if (peError) { *peError = (vr::EVRApplicationError)0; }
 	LOG_EXIT_RC(rc, "CppStubGetApplicationPropertyString");
 }
 
@@ -556,6 +557,7 @@ bool VRApplicationsCppStub::GetApplicationPropertyBool(const char * pchAppKey, v
 {
 	LOG_ENTRY("CppStubGetApplicationPropertyBool");
 	static bool rc = true;
+	if (peError) { *peError = (vr::EVRApplicationError)0; }
 	LOG_EXIT_RC(rc, "CppStubGetApplicationPropertyBool");
 }
 
@@ -563,6 +565,7 @@ uint64_t VRApplicationsCppStub::GetApplicationPropertyUint64(const char * pchApp
 {
 	LOG_ENTRY("CppStubGetApplicationPropertyUint64");
 	static uint64_t rc = 0;
+	if (peError) { *peError = (vr::EVRApplicationError)0; }
 	LOG_EXIT_RC(rc, "CppStubGetApplicationPropertyUint64");
 }
 
@@ -1746,6 +1749,7 @@ uint32_t VRRenderModelsCppStub::GetRenderModelThumbnailURL(const char * pchRende
 {
 	LOG_ENTRY("CppStubGetRenderModelThumbnailURL");
 	static uint32_t rc = 0;
+	if (peError) { *peError = (vr::EVRRenderModelError)0; }
 	LOG_EXIT_RC(rc, "CppStubGetRenderModelThumbnailURL");
 }
 
@@ -1753,6 +1757,7 @@ uint32_t VRRenderModelsCppStub::GetRenderModelOriginalPath(const char * pchRende
 {
 	LOG_ENTRY("CppStubGetRenderModelOriginalPath");
 	static uint32_t rc = 0;
+	if (peError) { *peError = (vr::EVRRenderModelError)0; }
 	LOG_EXIT_RC(rc, "CppStubGetRenderModelOriginalPath");
 }
 
@@ -1788,30 +1793,35 @@ bool VRSettingsCppStub::Sync(bool bForce, vr::EVRSettingsError * peError)
 {
 	LOG_ENTRY("CppStubSync");
 	static bool rc = true;
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT_RC(rc, "CppStubSync");
 }
 
 void VRSettingsCppStub::SetBool(const char * pchSection, const char * pchSettingsKey, bool bValue, vr::EVRSettingsError * peError)
 {
 	LOG_ENTRY("CppStubSetBool");
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT("CppStubSetBool");
 }
 
 void VRSettingsCppStub::SetInt32(const char * pchSection, const char * pchSettingsKey, int32_t nValue, vr::EVRSettingsError * peError)
 {
 	LOG_ENTRY("CppStubSetInt32");
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT("CppStubSetInt32");
 }
 
 void VRSettingsCppStub::SetFloat(const char * pchSection, const char * pchSettingsKey, float flValue, vr::EVRSettingsError * peError)
 {
 	LOG_ENTRY("CppStubSetFloat");
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT("CppStubSetFloat");
 }
 
 void VRSettingsCppStub::SetString(const char * pchSection, const char * pchSettingsKey, const char * pchValue, vr::EVRSettingsError * peError)
 {
 	LOG_ENTRY("CppStubSetString");
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT("CppStubSetString");
 }
 
@@ -1819,6 +1829,7 @@ bool VRSettingsCppStub::GetBool(const char * pchSection, const char * pchSetting
 {
 	LOG_ENTRY("CppStubGetBool");
 	static bool rc = true;
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT_RC(rc, "CppStubGetBool");
 }
 
@@ -1826,6 +1837,7 @@ int32_t VRSettingsCppStub::GetInt32(const char * pchSection, const char * pchSet
 {
 	LOG_ENTRY("CppStubGetInt32");
 	static int32_t rc = 0;
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT_RC(rc, "CppStubGetInt32");
 }
 
@@ -1833,24 +1845,28 @@ float VRSettingsCppStub::GetFloat(const char * pchSection, const char * pchSetti
 {
 	LOG_ENTRY("CppStubGetFloat");
 	static float rc;
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT_RC(rc, "CppStubGetFloat");
 }
 
 void VRSettingsCppStub::GetString(const char * pchSection, const char * pchSettingsKey, char * pchValue, uint32_t unValueLen, vr::EVRSettingsError * peError)
 {
 	LOG_ENTRY("CppStubGetString");
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT("CppStubGetString");
 }
 
 void VRSettingsCppStub::RemoveSection(const char * pchSection, vr::EVRSettingsError * peError)
 {
 	LOG_ENTRY("CppStubRemoveSection");
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT("CppStubRemoveSection");
 }
 
 void VRSettingsCppStub::RemoveKeyInSection(const char * pchSection, const char * pchSettingsKey, vr::EVRSettingsError * peError)
 {
 	LOG_ENTRY("CppStubRemoveKeyInSection");
+	if (peError) { *peError = (vr::EVRSettingsError)0; }
 	LOG_EXIT("CppStubRemoveKeyInSection");
 }
 
