@@ -28,11 +28,27 @@ struct AbsoluteTransform
 	vr::HmdMatrix34_t origin2overlaytransform;
 };
 
+inline std::string to_string(const AbsoluteTransform& t)
+{
+	std::string ret; 
+	ret += "tracking_origin" + openvr_string::to_string(t.tracking_origin);
+	ret += "origin2overlaytransform" + openvr_string::to_string(t.origin2overlaytransform);
+	return ret;
+}
+
 struct TrackedDeviceRelativeTransform
 {
 	vr::TrackedDeviceIndex_t tracked_device;
 	vr::HmdMatrix34_t device2overlaytransform;
 };
+
+inline std::string to_string(const TrackedDeviceRelativeTransform& t)
+{
+	std::string ret;
+	ret += "tracked_device" + std::to_string(t.tracked_device);
+	ret += "device2overlaytransform" + openvr_string::to_string(t.device2overlaytransform);
+	return ret;
+}
 
 struct RGBColor
 {
@@ -41,11 +57,26 @@ struct RGBColor
 	float b;
 };
 
+inline std::string to_string(const RGBColor &vp)
+{
+	std::string s;
+	s += std::to_string(vp.r) + "," + std::to_string(vp.g) + "," + std::to_string(vp.b);
+	return s;
+}
+
 struct FloatRange
 {
 	float min;
 	float max;
 };
+
+inline std::string to_string(const FloatRange &vp)
+{
+	std::string s;
+	s += "min: " + std::to_string(vp.min);
+	s += "max: " + std::to_string(vp.max);
+	return s;
+}
 
 struct Uint32Size
 {
@@ -85,7 +116,6 @@ inline std::string to_string(const ViewPort_t &vp)
 	return s;
 }
 
-
 struct CameraFrameSize_t
 {
 	uint32_t width;
@@ -100,7 +130,6 @@ inline std::string to_string(const CameraFrameSize_t &vp)
 	s += " size: " + std::to_string(vp.size);
 	return s;
 }
-
 
 struct CameraFrameIntrinsics_t
 {
@@ -140,6 +169,11 @@ inline bool operator != (const my_typename &lhs, const my_typename &rhs)\
 {\
 	return !(lhs == rhs);\
 }
+
+MEMCMP_OPERATOR_EQ(TrackedDeviceRelativeTransform)
+MEMCMP_OPERATOR_EQ(AbsoluteTransform)
+MEMCMP_OPERATOR_EQ(FloatRange)
+MEMCMP_OPERATOR_EQ(RGBColor)
 MEMCMP_OPERATOR_EQ(VideoStreamTextureSize_t)
 MEMCMP_OPERATOR_EQ(CameraFrameIntrinsics_t)
 MEMCMP_OPERATOR_EQ(CameraFrameSize_t)
@@ -158,7 +192,7 @@ MEMCMP_OPERATOR_EQ(vr::Compositor_CumulativeStats)
 MEMCMP_OPERATOR_EQ(vr::HmdColor_t)
 MEMCMP_OPERATOR_EQ(vr::RenderModel_ComponentState_t)
 MEMCMP_OPERATOR_EQ(vr::RenderModel_Vertex_t)
-
+MEMCMP_OPERATOR_EQ(vr::VRTextureBounds_t)
 
 
 inline bool operator == (const vr::TrackedDevicePose_t &lhs, const vr::TrackedDevicePose_t &rhs)

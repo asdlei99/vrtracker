@@ -1300,6 +1300,7 @@ struct HistoryNodeOrIterator<T, P, false> : HistoryNode
 	vrtypes::history<T, P, ALLOCATOR_TYPE> item;
 };
 
+// history of vectors (as opposed to history of scalars)
 template<typename T, typename P, bool IsIterator>
 struct HistoryVectorNodeOrIterator : HistoryIterator
 {
@@ -1793,7 +1794,7 @@ struct vrschema
 
 		SDECL(overlay_rendering_pid, AlwaysAndForever, uint32_t);
 		SDECL(overlay_flags, EVROverlayError, uint32_t);
-		SDECL(overlay_color, EVROverlayError, HmdColor_t);
+		SDECL(overlay_color, EVROverlayError, RGBColor);
 		SDECL(overlay_alpha, EVROverlayError, float);
 		SDECL(overlay_texel_aspect, EVROverlayError, float);
 		SDECL(overlay_sort_order, EVROverlayError, uint32_t);
@@ -1834,10 +1835,7 @@ struct vrschema
 		VDECL(active_overlay_indexes, AlwaysAndForever, int);
 		VDECL(keyboard_text, AlwaysAndForever, char);
 		
-
-		
 		std::vector<per_overlay_state, ALLOCATOR_TYPE> overlays;
-
 		OverlayHelper *overlay_helper;
 	};
 
@@ -2136,9 +2134,7 @@ struct update_history_visit_fn : public vrstate_visitor
 			m_update_counter += 1;
 		}
 	}
-
 	EMPTY_LHS_TEMPLATE()
-
 };
 
 #ifdef HAVE_IMG_GUI
@@ -3185,7 +3181,6 @@ struct OverlayWrapper
 		return rc;
 	}
 
-
 	vr::EVROverlayError GetImageData(VROverlayHandle_t ulOverlayHandle,
 									scalar_result<uint32_t, EVROverlayError> *width_out,
 									scalar_result<uint32_t, EVROverlayError> *height_out,
@@ -3227,7 +3222,6 @@ struct OverlayWrapper
 				rc = err;
 			}
 		}
-
 		return rc;
 	}
 
@@ -3258,8 +3252,6 @@ struct OverlayWrapper
 	SCALAR_RESULT_WRAP_INDEXED(IVROverlay, ovi, EVROverlayError, GetOverlayMouseScale,		VROverlayHandle_t, HmdVector2_t);
 	SCALAR_RESULT_WRAP_INDEXED(IVROverlay, ovi, EVROverlayError, GetDashboardOverlaySceneProcess, VROverlayHandle_t,uint32_t);
 	SCALAR_RESULT_WRAP_INDEXED(IVROverlay, ovi, EVROverlayError, GetOverlayFlags, VROverlayHandle_t, uint32_t);
-
-
 
 	scalar_result<Uint32Size, EVROverlayError> GetOverlayTextureSize(VROverlayHandle_t h)
 	{
@@ -4389,49 +4381,79 @@ static void visit_rendermodel(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_per_overlay(
 	visitor_fn &visitor, 
-	vrstate::overlay_schema *ss, 
+	vrstate::overlay_schema *overlay_state, 
 	OverlayWrapper wrap, 
 	uint32_t overlay_index,
 	ALLOCATOR_DECL)
 {
+	vrstate::per_overlay_state *ss = &overlay_state->overlays[overlay_index];
+	vr::VROverlayHandle_t handle = 0;
 
 	if (visitor.visit_openvr())
 	{
-		const std::string &key = ss->overlay_helper->get_overlay_key_for_index(overlay_index);
-		scalar_result<VROverlayHandle_t, EVROverlayError> handle = wrap.GetOverlayHandle(key.c_str());
+		const std::string &key = overlay_state->overlay_helper->get_overlay_key_for_index(overlay_index);
+		scalar_result<VROverlayHandle_t, EVROverlayError> handle_result = wrap.GetOverlayHandle(key.c_str());
+		handle = handle_result.val;
 		vector_result<char, vr::EVROverlayError> name(wrap.string_pool);
-		wrap.GetOverlayName(handle.val, &name);
+		wrap.GetOverlayName(handle, &name);
 
-		visitor.visit_node(ss->overlays[overlay_index].overlay_key.item, key.c_str(), key.size() + 1);
-		visitor.visit_node(ss->overlays[overlay_index].overlay_handle.item, handle);
-		visitor.visit_node(ss->overlays[overlay_index].overlay_name.item, name.s.buf(), name.result_code, name.count);
+		visitor.visit_node(ss->overlay_key.item, key.c_str(), key.size() + 1);
+		visitor.visit_node(ss->overlay_handle.item, handle_result);
+		visitor.visit_node(ss->overlay_name.item, name.s.buf(), name.result_code, name.count);
 
 		scalar_result<uint32_t, EVROverlayError> width;
 		scalar_result<uint32_t, EVROverlayError> height;
 		uint8_t *ptr;
 		uint32_t size;
-		EVROverlayError err = wrap.GetImageData(handle.val,&width, &height, &ptr, &size);
-		visitor.visit_node(ss->overlays[overlay_index].overlay_image_width.item, width);
-		visitor.visit_node(ss->overlays[overlay_index].overlay_image_height.item, height);
-		visitor.visit_node(ss->overlays[overlay_index].overlay_image_data.item, ptr, err, size);
+		EVROverlayError err = wrap.GetImageData(handle,&width, &height, &ptr, &size);
+		visitor.visit_node(ss->overlay_image_width.item, width);
+		visitor.visit_node(ss->overlay_image_height.item, height);
+		visitor.visit_node(ss->overlay_image_data.item, ptr, err, size);
 		wrap.FreeImageData(ptr);
-
-		visitor.visit_node(ss->overlays[overlay_index].overlay_rendering_pid.item, wrap.GetOverlayRenderingPid(handle.val));
-		visitor.visit_node(ss->overlays[overlay_index].overlay_flags.item, wrap.GetOverlayFlags(handle.val));
 	}
 	else
 	{
-		visitor.visit_node(ss->overlays[overlay_index].overlay_key.item);
-		visitor.visit_node(ss->overlays[overlay_index].overlay_handle.item);
-		visitor.visit_node(ss->overlays[overlay_index].overlay_name.item);
+		visitor.visit_node(ss->overlay_key.item);
+		visitor.visit_node(ss->overlay_handle.item);
+		visitor.visit_node(ss->overlay_name.item);
 
-		visitor.visit_node(ss->overlays[overlay_index].overlay_image_width.item);
-		visitor.visit_node(ss->overlays[overlay_index].overlay_image_height.item);
-		visitor.visit_node(ss->overlays[overlay_index].overlay_image_data.item);
+		visitor.visit_node(ss->overlay_image_width.item);
+		visitor.visit_node(ss->overlay_image_height.item);
+		visitor.visit_node(ss->overlay_image_data.item);
+	}
 
-		visitor.visit_node(ss->overlays[overlay_index].overlay_rendering_pid.item);
-		visitor.visit_node(ss->overlays[overlay_index].overlay_flags.item);
+	LEAF_SCALAR(overlay_rendering_pid,				wrap.GetOverlayRenderingPid(handle));
+	LEAF_SCALAR(overlay_flags,						wrap.GetOverlayFlags(handle));
+	LEAF_SCALAR(overlay_color,						wrap.GetOverlayColor(handle));
+	LEAF_SCALAR(overlay_alpha,						wrap.GetOverlayAlpha(handle));
+	LEAF_SCALAR(overlay_texel_aspect,				wrap.GetOverlayTexelAspect(handle));
+	LEAF_SCALAR(overlay_sort_order,					wrap.GetOverlaySortOrder(handle));
+	LEAF_SCALAR(overlay_width_in_meters,			wrap.GetOverlayWidthInMeters(handle));
+	LEAF_SCALAR(overlay_auto_curve_range_in_meters, wrap.GetOverlayAutoCurveDistanceRangeInMeters(handle));
+	LEAF_SCALAR(overlay_texture_color_space,		wrap.GetOverlayTextureColorSpace(handle));
+	LEAF_SCALAR(overlay_texture_bounds,				wrap.GetOverlayTextureBounds(handle));
+	LEAF_SCALAR(overlay_transform_type,				wrap.GetOverlayTransformType(handle));
+	LEAF_SCALAR(overlay_transform_absolute,			wrap.GetOverlayTransformAbsolute(handle));
+	LEAF_SCALAR(overlay_transform_device_relative,  wrap.GetOverlayTransformTrackedDeviceRelative(handle));
 
+	LEAF_SCALAR(overlay_input_method,				wrap.GetOverlayInputMethod(handle));
+	LEAF_SCALAR(overlay_mouse_scale,				wrap.GetOverlayMouseScale(handle));
+	LEAF_SCALAR(overlay_is_hover_target,			wrap.IsHoverTargetOverlay(handle));
+	LEAF_SCALAR(overlay_texture_size,				wrap.GetOverlayTextureSize(handle));
+
+	if (visitor.visit_openvr())
+	{
+		scalar_result<TrackedDeviceIndex_t, EVROverlayError> device_index;
+		vector_result<char, EVROverlayError> name(wrap.string_pool);
+		wrap.GetOverlayTransformTrackedDeviceComponent(handle, &device_index, &name);
+
+		visitor.visit_node(ss->overlay_transform_component_relative_device_index.item, device_index);
+		visitor.visit_node(ss->overlay_transform_component_relative_name.item, name.s.buf(), name.result_code, name.count);
+	}
+	else
+	{
+		visitor.visit_node(ss->overlay_transform_component_relative_device_index.item);
+		visitor.visit_node(ss->overlay_transform_component_relative_name.item);
 	}
 }
 
