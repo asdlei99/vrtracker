@@ -1763,7 +1763,10 @@ struct vrschema
 			INIT(overlay_image_height, char),
 			INIT(overlay_image_data, char),
 			INIT(overlay_rendering_pid, uint32_t),
-			INIT(overlay_flags, VROverlayFlags)
+			INIT(overlay_color, VROverlayFlags),
+			INIT(overlay_texel_aspect, VROverlayFlags),
+
+
 		{}
 
 		VDECL2(overlay_key, AlwaysAndForever, char);
@@ -1776,6 +1779,26 @@ struct vrschema
 
 		SDECL2(overlay_rendering_pid, AlwaysAndForever, uint32_t);
 		SDECL2(overlay_flags, EVROverlayError, VROverlayFlags);
+		SDECL2(overlay_color, EVROverlayError, HmdColor_t);
+		SDECL2(overlay_alpha, EVROverlayError, float);
+		SDECL2(overlay_texel_aspect, EVROverlayError, float);
+		SDECL2(overlay_sort_order, EVROverlayError, uint32_t);
+		SDECL2(overlay_width_in_meters, EVROverlayError, float);
+		SDECL2(overlay_auto_curve_range_in_meters, EVROverlayError, FloatRange);
+		SDECL2(overlay_texture_color_space, EVROverlayError, EColorSpace);
+		SDECL2(overlay_texture_bounds, EVROverlayError, VRTextureBounds_t);
+		SDECL2(overlay_transform_type, EVROverlayError, VROverlayTransformType);
+		SDECL2(overlay_transform_absolute, EVROverlayError, AbsoluteTransform);
+		SDECL2(overlay_transform_device_relative, EVROverlayError, TrackedDeviceRelativeTransform);
+		SDECL2(overlay_transform_component_relative_device_index, EVROverlayError, TrackedDeviceIndex_t);
+		VDECL2(overlay_transform_component_relative_name, EVROverlayError, char);
+
+		SDECL2(overlay_input_method, EVROverlayError, VROverlayInputMethod);
+		SDECL2(overlay_mouse_scale, EVROverlayError, HmdVector2_t);
+		SDECL2(overlay_is_hover_target, AlwaysAndForever, bool);
+		SDECL2(overlay_texture_size, EVROverlayError, Uint32Size);
+
+
 	};
 
 	struct overlay_schema
@@ -1791,7 +1814,10 @@ struct vrschema
 
 		SDECL2(primary_dashboard_device, AlwaysAndForever, TrackedDeviceIndex_t);
 		SDECL2(is_dashboard_visible, AlwaysAndForever, bool);
+		SDECL2(dashboard_scene_process, EVROverlayError, uint32_t);
 		VDECL2(active_overlay_indexes, AlwaysAndForever, int);
+		VDECL2(keyboard_text, AlwaysAndForever, char);
+		
 
 		
 		std::vector<per_overlay_state, ALLOCATOR_TYPE> overlays;
@@ -4373,6 +4399,7 @@ static void visit_per_overlay(
 		wrap.FreeImageData(ptr);
 
 		visitor.visit_node(ss->overlays[overlay_index].overlay_rendering_pid.item, wrap.GetOverlayRenderingPid(handle.val));
+		visitor.visit_node(ss->overlays[overlay_index].overlay_flags.item, wrap.GetOverlayFlags(handle.val));
 	}
 	else
 	{
@@ -4385,6 +4412,8 @@ static void visit_per_overlay(
 		visitor.visit_node(ss->overlays[overlay_index].overlay_image_data.item);
 
 		visitor.visit_node(ss->overlays[overlay_index].overlay_rendering_pid.item);
+		visitor.visit_node(ss->overlays[overlay_index].overlay_flags.item);
+
 	}
 }
 
