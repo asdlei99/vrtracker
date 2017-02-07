@@ -1264,17 +1264,17 @@ void query_scalar_rcerror(scalar_result<T,ResultType> *result, InterfaceHandle *
 
 #define ALLOCATOR_TYPE vrtypes::slab_allocator<char>
 #define ALLOCATOR_DECL ALLOCATOR_TYPE &allocator
-#define INIT(var_name, type_name)					var_name( #var_name, allocator)
+#define INIT(var_name)					var_name( #var_name, allocator)
 
-#define VSDECL2(var_name, presence_type, type_name)	std::vector<HistoryNodeOrIterator<type_name, presence_type, bIsIterator>, ALLOCATOR_TYPE> var_name
+#define VSDECL(var_name, presence_type, type_name)	std::vector<HistoryNodeOrIterator<type_name, presence_type, bIsIterator>, ALLOCATOR_TYPE> var_name
 
 //std::vector<vrtypes::history<std::vector<char, ALLOCATOR_TYPE>, EVRSettingsError, ALLOCATOR_TYPE>, ALLOCATOR_TYPE> nodes;
-#define VVDECL2(var_name, presence_type, type_name)	std::vector<HistoryVectorNodeOrIterator<type_name, presence_type, bIsIterator>, ALLOCATOR_TYPE> var_name
+#define VVDECL(var_name, presence_type, type_name)	std::vector<HistoryVectorNodeOrIterator<type_name, presence_type, bIsIterator>, ALLOCATOR_TYPE> var_name
 
 // single value history
-#define SDECL2(var_name, presence_type, type_name)	HistoryNodeOrIterator<type_name, presence_type, bIsIterator> var_name
+#define SDECL(var_name, presence_type, type_name)	HistoryNodeOrIterator<type_name, presence_type, bIsIterator> var_name
 // vector of values history
-#define VDECL2(var_name, presence_type, type_name) HistoryVectorNodeOrIterator<type_name, presence_type, bIsIterator> var_name
+#define VDECL(var_name, presence_type, type_name) HistoryVectorNodeOrIterator<type_name, presence_type, bIsIterator> var_name
 
 
 // to relate the followng 4 c
@@ -1363,36 +1363,36 @@ struct vrschema
 
 		const property_row<PropertyIDT> *tbl;
 		const int tbl_size;
-		VSDECL2(props, PropertyErrorT, T);
+		VSDECL(props, PropertyErrorT, T);
 	};
 
 	struct hidden_mesh_schema
 	{
 		hidden_mesh_schema(ALLOCATOR_DECL)
 			:
-			INIT(hidden_mesh_triangle_count, uint32_t),
-			INIT(hidden_mesh_vertices, HmdVector2_t)
+			INIT(hidden_mesh_triangle_count),
+			INIT(hidden_mesh_vertices)
 		{}
 
-		SDECL2(hidden_mesh_triangle_count, AlwaysAndForever, uint32_t);
-		VDECL2(hidden_mesh_vertices, AlwaysAndForever, HmdVector2_t);
+		SDECL(hidden_mesh_triangle_count, AlwaysAndForever, uint32_t);
+		VDECL(hidden_mesh_vertices, AlwaysAndForever, HmdVector2_t);
 	};
 
 	struct eye_schema
 	{
 		eye_schema(ALLOCATOR_DECL)
 			:
-			INIT(projection, HmdMatrix44_t),
-			INIT(projection_raw, HmdVector4_t),
-			INIT(distortion, DistortionCoordinates_t),
-			INIT(eye2head, HmdMatrix34_t),
+			INIT(projection),
+			INIT(projection_raw),
+			INIT(distortion),
+			INIT(eye2head),
 			hidden_meshes(allocator)
 		{}
 
-		SDECL2(projection, AlwaysAndForever, HmdMatrix44_t);
-		SDECL2(projection_raw, AlwaysAndForever, HmdVector4_t);
-		SDECL2(distortion, bool, DistortionCoordinates_t);
-		SDECL2(eye2head, AlwaysAndForever, HmdMatrix34_t);
+		SDECL(projection, AlwaysAndForever, HmdMatrix44_t);
+		SDECL(projection_raw, AlwaysAndForever, HmdVector4_t);
+		SDECL(distortion, bool, DistortionCoordinates_t);
+		SDECL(eye2head, AlwaysAndForever, HmdMatrix34_t);
 		std::vector<hidden_mesh_schema, ALLOCATOR_TYPE> hidden_meshes;
 	};
 
@@ -1400,29 +1400,29 @@ struct vrschema
 	{
 		component_on_controller_schema(ALLOCATOR_DECL)
 			: 
-			INIT(transforms, RenderModel_ComponentState_t),
-			INIT(transforms_scroll_wheel, RenderModel_ComponentState_t)
+			INIT(transforms),
+			INIT(transforms_scroll_wheel)
 		{}
 
-		SDECL2(transforms, bool, RenderModel_ComponentState_t);
-		SDECL2(transforms_scroll_wheel, bool, RenderModel_ComponentState_t);
+		SDECL(transforms, bool, RenderModel_ComponentState_t);
+		SDECL(transforms_scroll_wheel, bool, RenderModel_ComponentState_t);
 	};
 	
 	struct system_controller_schema
 	{
 		system_controller_schema(ALLOCATOR_DECL)
 			:
-			INIT(raw_tracking_pose, TrackedDevicePose_t),
-			INIT(standing_tracking_pose, TrackedDevicePose_t),
-			INIT(seated_tracking_pose, TrackedDevicePose_t),
-			INIT(activity_level, EDeviceActivityLevel),
-			INIT(controller_role, ETrackedControllerRole),
-			INIT(device_class, ETrackedDeviceClass),
-			INIT(connected, bool),
-			INIT(controller_state, VRControllerState_t),
-			INIT(synced_seated_pose, TrackedDevicePose_t),
-			INIT(synced_standing_pose, TrackedDevicePose_t),
-			INIT(synced_raw_pose, TrackedDevicePose_t),
+			INIT(raw_tracking_pose),
+			INIT(standing_tracking_pose),
+			INIT(seated_tracking_pose),
+			INIT(activity_level),
+			INIT(controller_role),
+			INIT(device_class),
+			INIT(connected),
+			INIT(controller_state),
+			INIT(synced_seated_pose),
+			INIT(synced_standing_pose),
+			INIT(synced_raw_pose),
 			string_props(device_string_properties_table, TBL_SIZE(device_string_properties_table), allocator),
 			bool_props(device_bool_properties_table, TBL_SIZE(device_bool_properties_table), allocator),
 			float_props(device_float_properties_table, TBL_SIZE(device_float_properties_table), allocator),
@@ -1432,17 +1432,17 @@ struct vrschema
 			components(allocator)
 		{}
 
-		SDECL2(raw_tracking_pose, AlwaysAndForever, TrackedDevicePose_t);
-		SDECL2(seated_tracking_pose, AlwaysAndForever, TrackedDevicePose_t);
-		SDECL2(standing_tracking_pose, AlwaysAndForever, TrackedDevicePose_t);
-		SDECL2(activity_level, AlwaysAndForever, EDeviceActivityLevel);
-		SDECL2(controller_role, AlwaysAndForever, ETrackedControllerRole);
-		SDECL2(device_class, AlwaysAndForever, ETrackedDeviceClass);
-		SDECL2(connected, AlwaysAndForever, bool);
-		SDECL2(controller_state, bool, VRControllerState_t);
-		SDECL2(synced_seated_pose, bool, TrackedDevicePose_t);
-		SDECL2(synced_standing_pose, bool, TrackedDevicePose_t);
-		SDECL2(synced_raw_pose, bool, TrackedDevicePose_t);
+		SDECL(raw_tracking_pose, AlwaysAndForever, TrackedDevicePose_t);
+		SDECL(seated_tracking_pose, AlwaysAndForever, TrackedDevicePose_t);
+		SDECL(standing_tracking_pose, AlwaysAndForever, TrackedDevicePose_t);
+		SDECL(activity_level, AlwaysAndForever, EDeviceActivityLevel);
+		SDECL(controller_role, AlwaysAndForever, ETrackedControllerRole);
+		SDECL(device_class, AlwaysAndForever, ETrackedDeviceClass);
+		SDECL(connected, AlwaysAndForever, bool);
+		SDECL(controller_state, bool, VRControllerState_t);
+		SDECL(synced_seated_pose, bool, TrackedDevicePose_t);
+		SDECL(synced_standing_pose, bool, TrackedDevicePose_t);
+		SDECL(synced_raw_pose, bool, TrackedDevicePose_t);
 
 		properties_subtable<std::vector<char, ALLOCATOR_TYPE>, vr::ETrackedDeviceProperty, ETrackedPropertyError>	string_props;
 		properties_subtable<bool, vr::ETrackedDeviceProperty, ETrackedPropertyError>				bool_props;
@@ -1458,56 +1458,56 @@ struct vrschema
 	{
 		spatial_sort_schema(ALLOCATOR_DECL)
 			:
-			INIT(hmds_sorted, TrackedDeviceIndex_t),
-			INIT(controllers_sorted, TrackedDeviceIndex_t),
-			INIT(trackers_sorted, TrackedDeviceIndex_t),
-			INIT(reference_sorted, TrackedDeviceIndex_t)
+			INIT(hmds_sorted),
+			INIT(controllers_sorted),
+			INIT(trackers_sorted),
+			INIT(reference_sorted)
 		{}
 
-		VDECL2(hmds_sorted, AlwaysAndForever, TrackedDeviceIndex_t);
-		VDECL2(controllers_sorted, AlwaysAndForever, TrackedDeviceIndex_t);
-		VDECL2(trackers_sorted, AlwaysAndForever, TrackedDeviceIndex_t);
-		VDECL2(reference_sorted, AlwaysAndForever, TrackedDeviceIndex_t);
+		VDECL(hmds_sorted, AlwaysAndForever, TrackedDeviceIndex_t);
+		VDECL(controllers_sorted, AlwaysAndForever, TrackedDeviceIndex_t);
+		VDECL(trackers_sorted, AlwaysAndForever, TrackedDeviceIndex_t);
+		VDECL(reference_sorted, AlwaysAndForever, TrackedDeviceIndex_t);
 	};
 
 	struct system_schema
 	{
 		system_schema(ALLOCATOR_DECL)
 			:
-			INIT(vr_init_token, uint32_t),
-			INIT(recommended_target_size, uint32_t),
-			INIT(seconds_since_last_vsync, float),
-			INIT(frame_counter_since_last_vsync, uint64_t),
-			INIT(is_display_on_desktop, bool),
-			INIT(seated2standing, HmdMatrix34_t),
-			INIT(raw2standing, HmdMatrix34_t),
-			INIT(num_hmd, uint32_t),
-			INIT(num_controller, uint32_t),
-			INIT(num_tracking, uint32_t),
-			INIT(num_reference, uint32_t),
-			INIT(input_focus_captured_by_other, bool),
-			INIT(d3d9_adapter_index, int32_t),
-			INIT(dxgi_output_info, int32_t)
+			INIT(vr_init_token),
+			INIT(recommended_target_size),
+			INIT(seconds_since_last_vsync),
+			INIT(frame_counter_since_last_vsync),
+			INIT(is_display_on_desktop),
+			INIT(seated2standing),
+			INIT(raw2standing),
+			INIT(num_hmd),
+			INIT(num_controller),
+			INIT(num_tracking),
+			INIT(num_reference),
+			INIT(input_focus_captured_by_other),
+			INIT(d3d9_adapter_index),
+			INIT(dxgi_output_info)
 			, eyes(allocator)
 			, controllers(allocator)
 			, spatial_sorts(allocator)
 		{}
 
-		SDECL2(vr_init_token, AlwaysAndForever, uint32_t);
-		SDECL2(recommended_target_size, AlwaysAndForever, Uint32Size);
+		SDECL(vr_init_token, AlwaysAndForever, uint32_t);
+		SDECL(recommended_target_size, AlwaysAndForever, Uint32Size);
 
-		SDECL2(seconds_since_last_vsync, bool, float);
-		SDECL2(frame_counter_since_last_vsync, bool, uint64_t);
-		SDECL2(is_display_on_desktop, AlwaysAndForever, bool);
-		SDECL2(seated2standing, AlwaysAndForever, HmdMatrix34_t);
-		SDECL2(raw2standing, AlwaysAndForever, HmdMatrix34_t);
-		SDECL2(num_hmd, AlwaysAndForever, uint32_t);
-		SDECL2(num_controller, AlwaysAndForever, uint32_t);
-		SDECL2(num_tracking, AlwaysAndForever, uint32_t);
-		SDECL2(num_reference, AlwaysAndForever, uint32_t);
-		SDECL2(input_focus_captured_by_other, AlwaysAndForever, bool);
-		SDECL2(d3d9_adapter_index, AlwaysAndForever, int32_t);
-		SDECL2(dxgi_output_info, AlwaysAndForever, int32_t);
+		SDECL(seconds_since_last_vsync, bool, float);
+		SDECL(frame_counter_since_last_vsync, bool, uint64_t);
+		SDECL(is_display_on_desktop, AlwaysAndForever, bool);
+		SDECL(seated2standing, AlwaysAndForever, HmdMatrix34_t);
+		SDECL(raw2standing, AlwaysAndForever, HmdMatrix34_t);
+		SDECL(num_hmd, AlwaysAndForever, uint32_t);
+		SDECL(num_controller, AlwaysAndForever, uint32_t);
+		SDECL(num_tracking, AlwaysAndForever, uint32_t);
+		SDECL(num_reference, AlwaysAndForever, uint32_t);
+		SDECL(input_focus_captured_by_other, AlwaysAndForever, bool);
+		SDECL(d3d9_adapter_index, AlwaysAndForever, int32_t);
+		SDECL(dxgi_output_info, AlwaysAndForever, int32_t);
 
 		std::vector<eye_schema, ALLOCATOR_TYPE> eyes;
 		std::vector<system_controller_schema, ALLOCATOR_TYPE> controllers;
@@ -1518,23 +1518,23 @@ struct vrschema
 	{
 		application_schema(ALLOCATOR_DECL)
 			:
-			INIT(application_key, char),
-			INIT(is_installed, bool),
-			INIT(auto_launch, bool),
-			INIT(supported_mime_types, char),
-			INIT(process_id, uint32_t),
-			INIT(application_launch_arguments, char),
+			INIT(application_key),
+			INIT(is_installed),
+			INIT(auto_launch),
+			INIT(supported_mime_types),
+			INIT(process_id),
+			INIT(application_launch_arguments),
 			string_props(application_string_properties_table,TBL_SIZE(application_string_properties_table), allocator),
 			bool_props(application_bool_properties_table,TBL_SIZE(application_bool_properties_table), allocator),
 			uint64_props(application_uint64_properties_table,TBL_SIZE(application_uint64_properties_table), allocator)
 		{}
 
-		VDECL2(application_key, EVRApplicationError, char);
-		SDECL2(is_installed, AlwaysAndForever, bool);
-		SDECL2(auto_launch, AlwaysAndForever, bool); 
-		VDECL2(supported_mime_types, bool, char);
-		SDECL2(process_id, AlwaysAndForever, uint32_t);
-		VDECL2(application_launch_arguments, AlwaysAndForever, char);
+		VDECL(application_key, EVRApplicationError, char);
+		SDECL(is_installed, AlwaysAndForever, bool);
+		SDECL(auto_launch, AlwaysAndForever, bool); 
+		VDECL(supported_mime_types, bool, char);
+		SDECL(process_id, AlwaysAndForever, uint32_t);
+		VDECL(application_launch_arguments, AlwaysAndForever, char);
 
 		properties_subtable<std::vector<char, ALLOCATOR_TYPE>, vr::EVRApplicationProperty, EVRApplicationError>	string_props;
 		properties_subtable<bool, vr::EVRApplicationProperty, EVRApplicationError>		bool_props;
@@ -1545,37 +1545,37 @@ struct vrschema
 	{
 		mime_type_schema(ALLOCATOR_DECL)
 			:
-			INIT(mime_type, char),
-			INIT(default_application, char),
-			INIT(applications_that_support_mime_type, char)
+			INIT(mime_type),
+			INIT(default_application),
+			INIT(applications_that_support_mime_type)
 		{}
 
-		VDECL2(mime_type, AlwaysAndForever, char);
-		VDECL2(default_application, bool, char);
-		VDECL2(applications_that_support_mime_type, AlwaysAndForever, char);
+		VDECL(mime_type, AlwaysAndForever, char);
+		VDECL(default_application, bool, char);
+		VDECL(applications_that_support_mime_type, AlwaysAndForever, char);
 	};
 
 	struct applications_schema
 	{
 		applications_schema(ALLOCATOR_DECL)
 			:
-			INIT(starting_application, char),
-			INIT(transition_state, EVRApplicationTransitionState),
-			INIT(is_quit_user_prompt, bool),
-			INIT(num_applications, uint32_t),
-			INIT(current_scene_process_id, uint32_t),
+			INIT(starting_application),
+			INIT(transition_state),
+			INIT(is_quit_user_prompt),
+			INIT(num_applications),
+			INIT(current_scene_process_id),
 			mime_types(allocator),
 			applications(allocator)
 		{}
 
-		VDECL2(starting_application, EVRApplicationError, char);
-		SDECL2(transition_state, AlwaysAndForever, EVRApplicationTransitionState);
-		SDECL2(is_quit_user_prompt, AlwaysAndForever, bool);
-		SDECL2(current_scene_process_id, AlwaysAndForever, uint32_t);
+		VDECL(starting_application, EVRApplicationError, char);
+		SDECL(transition_state, AlwaysAndForever, EVRApplicationTransitionState);
+		SDECL(is_quit_user_prompt, AlwaysAndForever, bool);
+		SDECL(current_scene_process_id, AlwaysAndForever, uint32_t);
 
 		// 2/1/2017 applications is monotonically increasing.  but number of applications at a point
 		// in time varies:
-		SDECL2(num_applications, AlwaysAndForever, uint32_t);
+		SDECL(num_applications, AlwaysAndForever, uint32_t);
 
 		std::vector<mime_type_schema, ALLOCATOR_TYPE> mime_types;
 		std::vector<application_schema, ALLOCATOR_TYPE> applications;
@@ -1600,7 +1600,7 @@ struct vrschema
 			}
 			const char *const*tbl;
 			const int tbl_size;
-			VSDECL2(nodes, EVRSettingsError, T);
+			VSDECL(nodes, EVRSettingsError, T);
 		};
 
 		template <>
@@ -1620,7 +1620,7 @@ struct vrschema
 			}
 			const char *const*tbl;
 			const int tbl_size;
-			VVDECL2(nodes, EVRSettingsError, char);
+			VVDECL(nodes, EVRSettingsError, char);
 		};
 
 		struct section_schema
@@ -1658,96 +1658,96 @@ struct vrschema
 	{
 		chaperone_schema(ALLOCATOR_DECL)
 			:
-			INIT(calibration_state, ChaperoneCalibrationState),
-			INIT(play_area_size, HmdVector2_t),
-			INIT(play_area_rect, HmdQuad_t),
-			INIT(bounds_visible, bool),
-			INIT(bounds_colors, HmdColor_t),
-			INIT(camera_color, HmdColor_t)
+			INIT(calibration_state),
+			INIT(play_area_size),
+			INIT(play_area_rect),
+			INIT(bounds_visible),
+			INIT(bounds_colors),
+			INIT(camera_color)
 		{}
-		SDECL2(calibration_state, AlwaysAndForever, ChaperoneCalibrationState);
-		SDECL2(play_area_size, bool, HmdVector2_t);
-		SDECL2(play_area_rect, bool, HmdQuad_t);
-		SDECL2(bounds_visible, AlwaysAndForever, bool);
-		VDECL2(bounds_colors, AlwaysAndForever, HmdColor_t);
-		SDECL2(camera_color, AlwaysAndForever, HmdColor_t);
+		SDECL(calibration_state, AlwaysAndForever, ChaperoneCalibrationState);
+		SDECL(play_area_size, bool, HmdVector2_t);
+		SDECL(play_area_rect, bool, HmdQuad_t);
+		SDECL(bounds_visible, AlwaysAndForever, bool);
+		VDECL(bounds_colors, AlwaysAndForever, HmdColor_t);
+		SDECL(camera_color, AlwaysAndForever, HmdColor_t);
 	};
 
 	struct chaperonesetup_schema
 	{
 		chaperonesetup_schema(ALLOCATOR_DECL)
 			:
-			INIT(working_play_area_size, HmdVector2_t),
-			INIT(working_play_area_rect, HmdQuad_t),
-			INIT(working_collision_bounds_info, HmdQuad_t),
-			INIT(live_collision_bounds_info, HmdQuad_t),
-			INIT(working_seated2rawtracking, HmdMatrix34_t),
-			INIT(working_standing2rawtracking, HmdMatrix34_t),
-			INIT(live_collision_bounds_tags_info, uint8_t),
-			INIT(live_seated2rawtracking, HmdMatrix34_t),
-			INIT(live_physical_bounds_info, uint8_t)
+			INIT(working_play_area_size),
+			INIT(working_play_area_rect),
+			INIT(working_collision_bounds_info),
+			INIT(live_collision_bounds_info),
+			INIT(working_seated2rawtracking),
+			INIT(working_standing2rawtracking),
+			INIT(live_collision_bounds_tags_info),
+			INIT(live_seated2rawtracking),
+			INIT(live_physical_bounds_info)
 		{}
 
-		SDECL2(working_play_area_size, bool, HmdVector2_t);
-		SDECL2(working_play_area_rect, bool, HmdQuad_t);
-		VDECL2(working_collision_bounds_info, bool, HmdQuad_t);
-		VDECL2(live_collision_bounds_info, bool, HmdQuad_t);
-		SDECL2(working_seated2rawtracking, bool, HmdMatrix34_t);
-		SDECL2(working_standing2rawtracking, bool, HmdMatrix34_t);
-		VDECL2(live_collision_bounds_tags_info, bool, uint8_t);
-		SDECL2(live_seated2rawtracking, bool, HmdMatrix34_t);
-		VDECL2(live_physical_bounds_info, bool, HmdQuad_t);
+		SDECL(working_play_area_size, bool, HmdVector2_t);
+		SDECL(working_play_area_rect, bool, HmdQuad_t);
+		VDECL(working_collision_bounds_info, bool, HmdQuad_t);
+		VDECL(live_collision_bounds_info, bool, HmdQuad_t);
+		SDECL(working_seated2rawtracking, bool, HmdMatrix34_t);
+		SDECL(working_standing2rawtracking, bool, HmdMatrix34_t);
+		VDECL(live_collision_bounds_tags_info, bool, uint8_t);
+		SDECL(live_seated2rawtracking, bool, HmdMatrix34_t);
+		VDECL(live_physical_bounds_info, bool, HmdQuad_t);
 	};
 
 	struct compositor_controller_schema
 	{
 		compositor_controller_schema(ALLOCATOR_DECL)
 			:
-			INIT(last_render_pose, TrackedDevicePose_t),
-			INIT(last_game_pose, TrackedDevicePose_t)
+			INIT(last_render_pose),
+			INIT(last_game_pose)
 		{}
 
-		SDECL2(last_render_pose, EVRCompositorError, TrackedDevicePose_t);
-		SDECL2(last_game_pose, EVRCompositorError, TrackedDevicePose_t);
+		SDECL(last_render_pose, EVRCompositorError, TrackedDevicePose_t);
+		SDECL(last_game_pose, EVRCompositorError, TrackedDevicePose_t);
 	};
 
 	struct compositor_schema
 	{
 		compositor_schema(ALLOCATOR_DECL)
 			:
-			INIT(tracking_space, ETrackingUniverseOrigin),
-			INIT(frame_timing, Compositor_FrameTiming),
-			INIT(frame_timings, Compositor_FrameTiming),
-			INIT(frame_time_remaining, float),
-			INIT(cumulative_stats, Compositor_CumulativeStats),
-			INIT(foreground_fade_color, HmdColor_t),
-			INIT(background_fade_color, HmdColor_t),
-			INIT(grid_alpha, float),
-			INIT(is_fullscreen, bool),
-			INIT(current_scene_focus_process, uint32_t),
-			INIT(last_frame_renderer, uint32_t),
-			INIT(can_render_scene, bool),
-			INIT(is_mirror_visible, bool),
-			INIT(should_app_render_with_low_resource, bool),
-			INIT(instance_extensions_required, char),
+			INIT(tracking_space),
+			INIT(frame_timing),
+			INIT(frame_timings),
+			INIT(frame_time_remaining),
+			INIT(cumulative_stats),
+			INIT(foreground_fade_color),
+			INIT(background_fade_color),
+			INIT(grid_alpha),
+			INIT(is_fullscreen),
+			INIT(current_scene_focus_process),
+			INIT(last_frame_renderer),
+			INIT(can_render_scene),
+			INIT(is_mirror_visible),
+			INIT(should_app_render_with_low_resource),
+			INIT(instance_extensions_required),
 			controllers(allocator)
 		{}
 
-		SDECL2(tracking_space, AlwaysAndForever, ETrackingUniverseOrigin);
-		SDECL2(frame_timing, bool, Compositor_FrameTiming);
-		VDECL2(frame_timings, AlwaysAndForever, Compositor_FrameTiming);
-		SDECL2(frame_time_remaining, AlwaysAndForever, float);
-		SDECL2(cumulative_stats, AlwaysAndForever, Compositor_CumulativeStats);
-		SDECL2(foreground_fade_color, AlwaysAndForever, HmdColor_t);
-		SDECL2(background_fade_color, AlwaysAndForever, HmdColor_t);
-		SDECL2(grid_alpha, AlwaysAndForever, float);
-		SDECL2(is_fullscreen, AlwaysAndForever, bool);
-		SDECL2(current_scene_focus_process, AlwaysAndForever, uint32_t);
-		SDECL2(last_frame_renderer, AlwaysAndForever, uint32_t);
-		SDECL2(can_render_scene, AlwaysAndForever, bool);
-		SDECL2(is_mirror_visible, AlwaysAndForever, bool);
-		SDECL2(should_app_render_with_low_resource, AlwaysAndForever, bool);
-		VDECL2(instance_extensions_required, AlwaysAndForever, char);
+		SDECL(tracking_space, AlwaysAndForever, ETrackingUniverseOrigin);
+		SDECL(frame_timing, bool, Compositor_FrameTiming);
+		VDECL(frame_timings, AlwaysAndForever, Compositor_FrameTiming);
+		SDECL(frame_time_remaining, AlwaysAndForever, float);
+		SDECL(cumulative_stats, AlwaysAndForever, Compositor_CumulativeStats);
+		SDECL(foreground_fade_color, AlwaysAndForever, HmdColor_t);
+		SDECL(background_fade_color, AlwaysAndForever, HmdColor_t);
+		SDECL(grid_alpha, AlwaysAndForever, float);
+		SDECL(is_fullscreen, AlwaysAndForever, bool);
+		SDECL(current_scene_focus_process, AlwaysAndForever, uint32_t);
+		SDECL(last_frame_renderer, AlwaysAndForever, uint32_t);
+		SDECL(can_render_scene, AlwaysAndForever, bool);
+		SDECL(is_mirror_visible, AlwaysAndForever, bool);
+		SDECL(should_app_render_with_low_resource, AlwaysAndForever, bool);
+		VDECL(instance_extensions_required, AlwaysAndForever, char);
 
 		std::vector<compositor_controller_schema, ALLOCATOR_TYPE> controllers;
 	};
@@ -1756,47 +1756,61 @@ struct vrschema
 	{
 		per_overlay_state(ALLOCATOR_DECL)
 			:
-			INIT(overlay_key, char),
-			INIT(overlay_handle, char),
-			INIT(overlay_name, char),
-			INIT(overlay_image_width, char),
-			INIT(overlay_image_height, char),
-			INIT(overlay_image_data, char),
-			INIT(overlay_rendering_pid, uint32_t),
-			INIT(overlay_color, VROverlayFlags),
-			INIT(overlay_texel_aspect, VROverlayFlags),
-
-
+			INIT(overlay_key),
+			INIT(overlay_handle),
+			INIT(overlay_name),
+			INIT(overlay_image_width),
+			INIT(overlay_image_height),
+			INIT(overlay_image_data),
+			INIT(overlay_rendering_pid),
+			INIT(overlay_flags),
+			INIT(overlay_color),
+			INIT(overlay_alpha),
+			INIT(overlay_texel_aspect),
+			INIT(overlay_sort_order),
+			INIT(overlay_width_in_meters),
+			INIT(overlay_auto_curve_range_in_meters),
+			INIT(overlay_texture_color_space),
+			INIT(overlay_texture_bounds),
+			INIT(overlay_transform_type),
+			INIT(overlay_transform_absolute),
+			INIT(overlay_transform_device_relative),
+			INIT(overlay_transform_component_relative_device_index),
+			INIT(overlay_transform_component_relative_name),
+			INIT(overlay_input_method),
+			INIT(overlay_mouse_scale),
+			INIT(overlay_is_hover_target),
+			INIT(overlay_texture_size)
 		{}
 
-		VDECL2(overlay_key, AlwaysAndForever, char);
-		SDECL2(overlay_handle, EVROverlayError, vr::VROverlayHandle_t);   // i'm assuming handles can be reused - but keys are unique
-		VDECL2(overlay_name, EVROverlayError, char);
+		VDECL(overlay_key, AlwaysAndForever, char);
+		SDECL(overlay_handle, EVROverlayError, vr::VROverlayHandle_t);   // i'm assuming handles can be reused - but keys are unique
+		VDECL(overlay_name, EVROverlayError, char);
 		
-		SDECL2(overlay_image_width, EVROverlayError, uint32_t);
-		SDECL2(overlay_image_height, EVROverlayError, uint32_t);
-		VDECL2(overlay_image_data, EVROverlayError, uint8_t);
+		SDECL(overlay_image_width, EVROverlayError, uint32_t);
+		SDECL(overlay_image_height, EVROverlayError, uint32_t);
+		VDECL(overlay_image_data, EVROverlayError, uint8_t);
 
-		SDECL2(overlay_rendering_pid, AlwaysAndForever, uint32_t);
-		SDECL2(overlay_flags, EVROverlayError, VROverlayFlags);
-		SDECL2(overlay_color, EVROverlayError, HmdColor_t);
-		SDECL2(overlay_alpha, EVROverlayError, float);
-		SDECL2(overlay_texel_aspect, EVROverlayError, float);
-		SDECL2(overlay_sort_order, EVROverlayError, uint32_t);
-		SDECL2(overlay_width_in_meters, EVROverlayError, float);
-		SDECL2(overlay_auto_curve_range_in_meters, EVROverlayError, FloatRange);
-		SDECL2(overlay_texture_color_space, EVROverlayError, EColorSpace);
-		SDECL2(overlay_texture_bounds, EVROverlayError, VRTextureBounds_t);
-		SDECL2(overlay_transform_type, EVROverlayError, VROverlayTransformType);
-		SDECL2(overlay_transform_absolute, EVROverlayError, AbsoluteTransform);
-		SDECL2(overlay_transform_device_relative, EVROverlayError, TrackedDeviceRelativeTransform);
-		SDECL2(overlay_transform_component_relative_device_index, EVROverlayError, TrackedDeviceIndex_t);
-		VDECL2(overlay_transform_component_relative_name, EVROverlayError, char);
+		SDECL(overlay_rendering_pid, AlwaysAndForever, uint32_t);
+		SDECL(overlay_flags, EVROverlayError, uint32_t);
+		SDECL(overlay_color, EVROverlayError, HmdColor_t);
+		SDECL(overlay_alpha, EVROverlayError, float);
+		SDECL(overlay_texel_aspect, EVROverlayError, float);
+		SDECL(overlay_sort_order, EVROverlayError, uint32_t);
+		SDECL(overlay_width_in_meters, EVROverlayError, float);
+		SDECL(overlay_auto_curve_range_in_meters, EVROverlayError, FloatRange);
+		SDECL(overlay_texture_color_space, EVROverlayError, EColorSpace);
+		SDECL(overlay_texture_bounds, EVROverlayError, VRTextureBounds_t);
+		SDECL(overlay_transform_type, EVROverlayError, VROverlayTransformType);
+		SDECL(overlay_transform_absolute, EVROverlayError, AbsoluteTransform);
+		SDECL(overlay_transform_device_relative, EVROverlayError, TrackedDeviceRelativeTransform);
+		SDECL(overlay_transform_component_relative_device_index, EVROverlayError, TrackedDeviceIndex_t);
+		VDECL(overlay_transform_component_relative_name, EVROverlayError, char);
 
-		SDECL2(overlay_input_method, EVROverlayError, VROverlayInputMethod);
-		SDECL2(overlay_mouse_scale, EVROverlayError, HmdVector2_t);
-		SDECL2(overlay_is_hover_target, AlwaysAndForever, bool);
-		SDECL2(overlay_texture_size, EVROverlayError, Uint32Size);
+		SDECL(overlay_input_method, EVROverlayError, VROverlayInputMethod);
+		SDECL(overlay_mouse_scale, EVROverlayError, HmdVector2_t);
+		SDECL(overlay_is_hover_target, AlwaysAndForever, bool);
+		SDECL(overlay_texture_size, EVROverlayError, Uint32Size);
 
 
 	};
@@ -1805,18 +1819,20 @@ struct vrschema
 	{
 		overlay_schema(ALLOCATOR_DECL)
 			:
-			INIT(primary_dashboard_device, TrackedDeviceIndex_t),
-			INIT(is_dashboard_visible, bool),
-			INIT(active_overlay_indexes, int),
+			INIT(primary_dashboard_device),
+			INIT(is_dashboard_visible),
+			INIT(dashboard_scene_process),
+			INIT(active_overlay_indexes),
+			INIT(keyboard_text),
 			overlays(allocator),
 			overlay_helper(nullptr)
 		{}
 
-		SDECL2(primary_dashboard_device, AlwaysAndForever, TrackedDeviceIndex_t);
-		SDECL2(is_dashboard_visible, AlwaysAndForever, bool);
-		SDECL2(dashboard_scene_process, EVROverlayError, uint32_t);
-		VDECL2(active_overlay_indexes, AlwaysAndForever, int);
-		VDECL2(keyboard_text, AlwaysAndForever, char);
+		SDECL(primary_dashboard_device, AlwaysAndForever, TrackedDeviceIndex_t);
+		SDECL(is_dashboard_visible, AlwaysAndForever, bool);
+		SDECL(dashboard_scene_process, EVROverlayError, uint32_t);
+		VDECL(active_overlay_indexes, AlwaysAndForever, int);
+		VDECL(keyboard_text, AlwaysAndForever, char);
 		
 
 		
@@ -1829,40 +1845,40 @@ struct vrschema
 	{
 		rendermodel_component_schema(ALLOCATOR_DECL)
 			:
-			INIT(component_name, char),
-			INIT(button_mask, uint64_t),
-			INIT(render_model_name, char)
+			INIT(component_name),
+			INIT(button_mask),
+			INIT(render_model_name)
 		{}
 
-		VDECL2(component_name, AlwaysAndForever, char);
-		SDECL2(button_mask, AlwaysAndForever, uint64_t);
-		VDECL2(render_model_name, bool, char);
+		VDECL(component_name, AlwaysAndForever, char);
+		SDECL(button_mask, AlwaysAndForever, uint64_t);
+		VDECL(render_model_name, bool, char);
 	};
 
 	struct rendermodel_schema
 	{
 		rendermodel_schema(ALLOCATOR_DECL)
 			:
-			INIT(render_model_name, char),
-			INIT(thumbnail_url, char),
-			INIT(original_path, char),
-			INIT(vertex_data, RenderModel_Vertex_t),
-			INIT(index_data, uint16_t),
-			INIT(texture_width, uint16_t),
-			INIT(texture_height, uint16_t),
-			INIT(texture_map_data, uint8_t),
+			INIT(render_model_name),
+			INIT(thumbnail_url),
+			INIT(original_path),
+			INIT(vertex_data),
+			INIT(index_data),
+			INIT(texture_width),
+			INIT(texture_height),
+			INIT(texture_map_data),
 			components(allocator)
 		{}
 
-		VDECL2(render_model_name, AlwaysAndForever, char);
-		VDECL2(thumbnail_url, EVRRenderModelError, char);
-		VDECL2(original_path, EVRRenderModelError, char);
-		VDECL2(vertex_data, EVRRenderModelError, RenderModel_Vertex_t);
-		VDECL2(index_data, EVRRenderModelError, uint16_t);
+		VDECL(render_model_name, AlwaysAndForever, char);
+		VDECL(thumbnail_url, EVRRenderModelError, char);
+		VDECL(original_path, EVRRenderModelError, char);
+		VDECL(vertex_data, EVRRenderModelError, RenderModel_Vertex_t);
+		VDECL(index_data, EVRRenderModelError, uint16_t);
 
-		SDECL2(texture_width, EVRRenderModelError, uint16_t);
-		SDECL2(texture_height, EVRRenderModelError, uint16_t);
-		VDECL2(texture_map_data, EVRRenderModelError, uint8_t);
+		SDECL(texture_width, EVRRenderModelError, uint16_t);
+		SDECL(texture_height, EVRRenderModelError, uint16_t);
+		VDECL(texture_map_data, EVRRenderModelError, uint8_t);
 
 		std::vector<rendermodel_component_schema, ALLOCATOR_TYPE> components;
 	};
@@ -1880,16 +1896,16 @@ struct vrschema
 	{
 		cameraframetype_schema(ALLOCATOR_DECL)
 			:
-			INIT(frame_size, uint32_t),
-			INIT(intrinsics, HmdVector2_t),
-			INIT(projection, HmdMatrix44_t),
-			INIT(video_texture_size, uint32_t)			
+			INIT(frame_size),
+			INIT(intrinsics),
+			INIT(projection),
+			INIT(video_texture_size)			
 		{}
 
-		SDECL2(frame_size, EVRTrackedCameraError, CameraFrameSize_t);
-		SDECL2(intrinsics, EVRTrackedCameraError, CameraFrameIntrinsics_t);
-		SDECL2(projection, EVRTrackedCameraError, HmdMatrix44_t);
-		SDECL2(video_texture_size, EVRTrackedCameraError, VideoStreamTextureSize_t);
+		SDECL(frame_size, EVRTrackedCameraError, CameraFrameSize_t);
+		SDECL(intrinsics, EVRTrackedCameraError, CameraFrameIntrinsics_t);
+		SDECL(projection, EVRTrackedCameraError, HmdMatrix44_t);
+		SDECL(video_texture_size, EVRTrackedCameraError, VideoStreamTextureSize_t);
 	};
 
 	struct trackedcamera_schema
@@ -1898,11 +1914,11 @@ struct vrschema
 		{
 			controller_camera_schema(ALLOCATOR_DECL)
 				:
-				INIT(has_camera, bool),
+				INIT(has_camera),
 				cameraframetypes(allocator)
 			{}
 
-			SDECL2(has_camera, EVRTrackedCameraError, bool);
+			SDECL(has_camera, EVRTrackedCameraError, bool);
 			std::vector<cameraframetype_schema, ALLOCATOR_TYPE> cameraframetypes;
 		};
 
@@ -1917,14 +1933,14 @@ struct vrschema
 	{
 		extendeddisplay_schema(ALLOCATOR_DECL)
 			: 
-			INIT(window_bounds, WindowBounds_t),
-			INIT(left_output_viewport, ViewPort_t),
-			INIT(right_output_viewport, ViewPort_t)
+			INIT(window_bounds),
+			INIT(left_output_viewport),
+			INIT(right_output_viewport)
 		{}
 
-		SDECL2(window_bounds, AlwaysAndForever, WindowBounds_t);
-		SDECL2(left_output_viewport, AlwaysAndForever, ViewPort_t);
-		SDECL2(right_output_viewport, AlwaysAndForever, ViewPort_t);
+		SDECL(window_bounds, AlwaysAndForever, WindowBounds_t);
+		SDECL(left_output_viewport, AlwaysAndForever, ViewPort_t);
+		SDECL(right_output_viewport, AlwaysAndForever, ViewPort_t);
 	};
 
 	vrschema(ALLOCATOR_DECL)
@@ -3124,7 +3140,7 @@ struct RenderModelWrapper
 // e.g. virtual EVROverlayError GetOverlayAlpha(VROverlayHandle_t ulOverlayHandle, float *pfAlpha) = 0;
 //
 #define SCALAR_RESULT_WRAP_INDEXED(handle_type, handle, error_type, function, index_type, return_type)\
-	inline scalar_result<return_type, error_type> function(index_type index, return_type *ret) \
+	inline scalar_result<return_type, error_type> function(index_type index) \
 	{ \
 		scalar_result<return_type,error_type> rc;\
 		rc.result_code = handle->function(index, &rc.val);\
@@ -3149,7 +3165,6 @@ struct OverlayWrapper
 		return keyboard_text;
 	}
 
-	SCALAR_RESULT_WRAP_INDEXED(IVROverlay, ovi, EVROverlayError, GetOverlayFlags, VROverlayHandle_t, uint32_t);
 
 	inline vector_result<char, EVROverlayError> GetOverlayKey(VROverlayHandle_t h)
 	{
@@ -3242,6 +3257,9 @@ struct OverlayWrapper
 	SCALAR_RESULT_WRAP_INDEXED(IVROverlay, ovi, EVROverlayError, GetOverlayInputMethod,		VROverlayHandle_t, VROverlayInputMethod);
 	SCALAR_RESULT_WRAP_INDEXED(IVROverlay, ovi, EVROverlayError, GetOverlayMouseScale,		VROverlayHandle_t, HmdVector2_t);
 	SCALAR_RESULT_WRAP_INDEXED(IVROverlay, ovi, EVROverlayError, GetDashboardOverlaySceneProcess, VROverlayHandle_t,uint32_t);
+	SCALAR_RESULT_WRAP_INDEXED(IVROverlay, ovi, EVROverlayError, GetOverlayFlags, VROverlayHandle_t, uint32_t);
+
+
 
 	scalar_result<Uint32Size, EVROverlayError> GetOverlayTextureSize(VROverlayHandle_t h)
 	{
