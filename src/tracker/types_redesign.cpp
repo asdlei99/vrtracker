@@ -1781,7 +1781,8 @@ struct vrschema
 			INIT(overlay_input_method),
 			INIT(overlay_mouse_scale),
 			INIT(overlay_is_hover_target),
-			INIT(overlay_texture_size)
+			INIT(overlay_texture_size),
+			INIT(events)
 		{}
 
 		VDECL(overlay_key, AlwaysAndForever, char);
@@ -1813,6 +1814,7 @@ struct vrschema
 		SDECL(overlay_is_hover_target, AlwaysAndForever, bool);
 		SDECL(overlay_texture_size, EVROverlayError, Uint32Size);
 
+		SDECL(events, AlwaysAndForever, VREvent_t);	// experiment
 
 	};
 
@@ -4464,12 +4466,11 @@ class OverlayHelper
 {
 public:
 	// walks through known overlays and updates index set
-	void update_active_indexes(std::vector<int> *active_indexes, OverlayWrapper &ow, const TrackerConfigInternal &config)
+	void update(std::vector<int> *active_indexes, OverlayWrapper &ow, const TrackerConfigInternal &config)
 	{
 		update_based_on_tracker_config(active_indexes, ow, config);
 		update_based_on_handles(active_indexes, ow);
 	}
-
 
 	int get_index_for_key(const char *key)
 	{
@@ -4482,7 +4483,16 @@ public:
 		}
 		return ret;
 	}
-
+	int get_index_for_handle(VROverlayHandle_t h)
+	{
+		int ret = -1;
+		auto iter = overlay_handle2index.find(h);
+		if (iter != overlay_handle2index.end())
+		{
+			ret = iter->second;
+		}
+		return ret;
+	}
 
 	const std::string &get_overlay_key_for_index(const uint32_t overlay_index)
 	{
@@ -4506,7 +4516,7 @@ private:
 		}
 		else
 		{
-			overlay_keys.push_back(key);
+			overlay_keys.push_back(key);					// update caches
 			rc = overlay_keys.size() - 1;
 			overlay_keys2index.insert(iter, { key, rc });
 		}
@@ -4526,6 +4536,7 @@ private:
 				std::string bla(config.m_overlay_keys[i].c_str());				// TODO this copy is stupid
 				int index = get_overlay_index_for_key(bla);
 				active_indexes->push_back(index);
+				overlay_handle2index.insert({ handle, index });
 			}
 		}
 	}
@@ -4549,6 +4560,7 @@ private:
 					std::string bla(key);									// This copy is stupid too
 					int index = get_overlay_index_for_key(bla);
 					active_indexes->push_back(index);
+					overlay_handle2index.insert({ h, index });
 				}
 			}
 		}
@@ -4556,6 +4568,7 @@ private:
 
 	std::vector<std::string> overlay_keys;
 	std::unordered_map<std::string, int> overlay_keys2index;
+	std::unordered_map<VROverlayHandle_t, int> overlay_handle2index;
 };
 
 template <typename visitor_fn>
@@ -4573,7 +4586,7 @@ static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss
 		{
 			ss->overlay_helper = new OverlayHelper();
 		}
-		ss->overlay_helper->update_active_indexes(&active_indexes, ow, config);
+		ss->overlay_helper->update(&active_indexes, ow, config);
 
 		int *ptr = nullptr;
 		if (active_indexes.size() > 0)
@@ -4723,36 +4736,7 @@ static void visit_trackedcamera_state(visitor_fn &visitor,
 	visitor.end_group_node("camera", -1);
 }
 
-//
-// events don't have history - like the other state values do.  but they are ordered,
-// so are associated and stored with the monotonically increasing frame_number
-struct FrameNumberedEvent
-{
-	FrameNumberedEvent()
-	{
-	}
 
-	FrameNumberedEvent(int frame_number_in, const VREvent_t &event_in)
-		:	frame_number(frame_number_in),
-			event(event_in)
-	{
-	}
-
-	FrameNumberedEvent(const FrameNumberedEvent &rhs)
-		:
-		frame_number(rhs.frame_number),
-		event(rhs.event)
-	{}
-
-	std::string GetChangeDescriptionString()
-	{
-		using namespace openvr_string;
-		return to_string(event);
-	}
-
-	int frame_number;
-	VREvent_t event;
-};
 
 static void encode_events(EncodeStream *stream, const std::forward_list<FrameNumberedEvent, ALLOCATOR_TYPE> &events)
 {
@@ -6958,7 +6942,7 @@ vr::EVROverlayError VROverlayCursor::FindOverlay(const char *pchOverlayKey, VROv
 	vr::EVROverlayError rc = VROverlayError_UnknownOverlay;
 	OverlayHelper *h = state_ref.overlay_helper;
 
-	// regardless of result, pOverlayHandle is set 2/6/2017
+	// regardless of result, pOverlayHandle return value is set 2/6/2017
 	if (pOverlayHandle)
 	{
 		*pOverlayHandle = 0;
@@ -6986,7 +6970,6 @@ vr::EVROverlayError
 VROverlayCursor::GetOverlayIndexForHandle(vr::VROverlayHandle_t ulOverlayHandle, int *index_ret)
 {
 	bool found_it = false;
-	OverlayHelper *h = state_ref.overlay_helper;
 	SYNC_OVERLAY_STATE(active_overlay_indexes, active_overlay_indexes);	// what overlays are currently present
 
 	for (auto iter = active_overlay_indexes->val.begin(); iter != active_overlay_indexes->val.end(); iter++)
@@ -8023,6 +8006,19 @@ void capture_vr_event(vr_state_tracker_t h, const VREvent_t &event_in)
 	update_timestamp(s);
 	s->m_events.emplace_front(s->m_frame_number, event_in);
 }
+
+void capture_vr_overlay_event(vr_state_tracker_t h, vr::VROverlayHandle_t overlay_handle, const VREvent_t &event_in)
+{
+	tracker *s = static_cast<tracker*>(h);
+	update_timestamp(s);
+
+	// helper and overlay must be present or I can't insert the events
+	assert(s->m_state.overlay_node.overlay_helper);
+	int index = s->m_state.overlay_node.overlay_helper->get_index_for_handle(overlay_handle);
+	assert(index >= 0);
+	s->m_state.overlay_node.overlays[index].events.item.emplace_front(s->m_frame_number, event_in);
+}
+
 
 // public interface
 void dump_vr_history(vr_state_tracker_t h)

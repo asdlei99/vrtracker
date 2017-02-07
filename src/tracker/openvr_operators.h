@@ -160,6 +160,39 @@ inline std::string to_string(const VideoStreamTextureSize_t &vp)
 	return s;
 }
 
+
+//
+// events don't have history - like the other state values do.  but they are ordered,
+// so are associated and stored with the monotonically increasing frame_number
+struct FrameNumberedEvent
+{
+	FrameNumberedEvent()
+	{
+	}
+
+	FrameNumberedEvent(int frame_number_in, const vr::VREvent_t &event_in)
+		: frame_number(frame_number_in),
+		event(event_in)
+	{
+	}
+
+	FrameNumberedEvent(const FrameNumberedEvent &rhs)
+		:
+		frame_number(rhs.frame_number),
+		event(rhs.event)
+	{}
+
+	std::string GetChangeDescriptionString()
+	{
+		using namespace openvr_string;
+		return to_string(event);
+	}
+
+	int frame_number;
+	vr::VREvent_t event;
+};
+
+
 #define MEMCMP_OPERATOR_EQ(my_typename)\
 inline bool operator == (const my_typename &lhs, const my_typename &rhs)\
 {\

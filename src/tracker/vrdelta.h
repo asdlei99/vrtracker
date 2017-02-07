@@ -31,6 +31,13 @@
 // I think the entire vr state can be made flat
 //
 
+// how to test such a system
+//
+// a monitor that watches transactions and marks desyncs: 
+//			// # times that there is a mismatch.
+//			// # times there is a mismatch that isn't corrected by refreshing
+//
+
 // I'd like to know the events that occured as well
 // so it becomes more of a journal?
 
@@ -94,8 +101,7 @@ struct TrackerConfig
 //  * I like that the system tries to not be dependent on tracking all the writes to capture state
 // 
 
-
-// should the tracker return cursors for all interfaces?
+// should the tracker always return cursors for all interfaces?
 // NO.  sometimes I don't want the old renderstatistics.  I want to replay
 // and record new render statistics.
 
@@ -107,11 +113,10 @@ void capture_vr_state(vr_state_tracker_t h,
 void get_frame_range(vr_state_tracker_t, int *first_frame, int *last_frame);
 
 void capture_vr_event(vr_state_tracker_t h, const vr::VREvent_t &event);
+void capture_vr_overlay_event(vr_state_tracker_t h, vr::VROverlayHandle_t overlay_handle, const vr::VREvent_t &event);
 
 void dump_vr_history(vr_state_tracker_t h);
-
 void dump_vr_state(vr_state_tracker_t h, openvr_broker::open_vr_interfaces &interfaces);
-
 void dump_vr_current(vr_state_tracker_t h, openvr_broker::open_vr_interfaces &interfaces);
 
 void save_vrstate_to_file(vr_state_tracker_t h, const char *filename, bool binary);
