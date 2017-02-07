@@ -159,15 +159,15 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	ia->Refresh();
 	ib->Refresh();
 
-	
-	
-
 	// create overlays per TrackerConfig
 	for (int i = 0; i < c.num_overlays_to_sample; i++)
 	{
 		vr::VROverlayHandle_t overlay_handle_a;
 		std::string friendly_name = std::string(c.overlay_keys_to_sample[i]) + "friendly";
 		vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_a);
+
+		
+
 
 		vr::VROverlayHandle_t overlay_handle_b;
 		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_b);
@@ -308,6 +308,61 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 		assert(strcmp(szbufa, szbufb) == 0);
 		assert(a_ret == b_ret);
 	}
+
+
+	// test with no textures assigned
+	{
+		for (int i = 0; i < c.num_overlays_to_sample; i++)
+		{
+			uint32_t aw=99, ah=99;
+			vr::EVROverlayError aimg_err = a->ovi->GetOverlayImageData(a_handles[i], nullptr, 0, &aw, &ah);
+
+			uint32_t bw = 99, bh = 99;
+			vr::EVROverlayError bimg_err = b->ovi->GetOverlayImageData(b_handles[i], nullptr, 0, &bw, &bh);
+			assert(aw == bw);
+			assert(ah == bh);
+		}
+	}
+	// test with textures
+	{
+		uint32_t texture_w = 128;
+		uint32_t texture_h = 64;
+		uint32_t depth = 4;
+		uint32_t tex_size = texture_w * texture_h * depth;
+		char *tex = (char *)malloc(tex_size);
+		char *texa = (char *)malloc(tex_size);
+		char *texb = (char *)malloc(tex_size);
+		for (uint32_t i = 0; i < tex_size; i++)
+		{
+			tex[i] = (char)i;
+		}
+
+		for (int i = 0; i < c.num_overlays_to_sample; i++)
+		{
+			vr::EVROverlayError erra = a->ovi->SetOverlayRaw(a_handles[i], tex, texture_w, texture_h, depth);
+			vr::EVROverlayError errb = b->ovi->SetOverlayRaw(b_handles[i], tex, texture_w, texture_h, depth);
+			ia->Refresh();
+			ib->Refresh();
+			uint32_t a_wout;
+			uint32_t a_hout;
+			vr::EVROverlayError geterra = a->ovi->GetOverlayImageData(a_handles[i], texa, tex_size, &a_wout, &a_hout);
+			uint32_t b_wout;
+			uint32_t b_hout;
+			vr::EVROverlayError geterrb = b->ovi->GetOverlayImageData(b_handles[i], texb, tex_size, &b_wout, &b_hout);
+
+			assert(geterra == geterrb);
+			assert(a_wout = b_wout);
+			assert(a_hout = b_hout);
+			assert(memcmp(tex, texa, tex_size) == 0);
+			assert(memcmp(tex, texb, tex_size) == 0);
+		}
+
+		free(tex);
+		free(texa);
+		free(texb);
+	}
+
+
 
 
 #if 0

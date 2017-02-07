@@ -1759,6 +1759,9 @@ struct vrschema
 			INIT(overlay_key, char),
 			INIT(overlay_handle, char),
 			INIT(overlay_name, char),
+			INIT(overlay_image_width, char),
+			INIT(overlay_image_height, char),
+			INIT(overlay_image_data, char),
 			INIT(overlay_rendering_pid, uint32_t),
 			INIT(overlay_flags, VROverlayFlags)
 		{}
@@ -1766,6 +1769,11 @@ struct vrschema
 		VDECL2(overlay_key, AlwaysAndForever, char);
 		SDECL2(overlay_handle, EVROverlayError, vr::VROverlayHandle_t);   // i'm assuming handles can be reused - but keys are unique
 		VDECL2(overlay_name, EVROverlayError, char);
+		
+		SDECL2(overlay_image_width, EVROverlayError, uint32_t);
+		SDECL2(overlay_image_height, EVROverlayError, uint32_t);
+		VDECL2(overlay_image_data, EVROverlayError, uint8_t);
+
 		SDECL2(overlay_rendering_pid, AlwaysAndForever, uint32_t);
 		SDECL2(overlay_flags, EVROverlayError, VROverlayFlags);
 	};
@@ -3136,6 +3144,57 @@ struct OverlayWrapper
 		return rc;
 	}
 
+
+	vr::EVROverlayError GetImageData(VROverlayHandle_t ulOverlayHandle,
+									scalar_result<uint32_t, EVROverlayError> *width_out,
+									scalar_result<uint32_t, EVROverlayError> *height_out,
+									uint8_t **ptr_out, uint32_t *size_out)
+	{
+		uint32_t width_query;
+		uint32_t height_query;
+		vr::EVROverlayError rc;
+		vr::EVROverlayError err = ovi->GetOverlayImageData(ulOverlayHandle, nullptr, 0, &width_query, &height_query);
+
+		if (err != vr::VROverlayError_ArrayTooSmall)
+		{
+			*width_out = make_scalar<uint32_t, EVROverlayError>(0, err);
+			*height_out = make_scalar<uint32_t, EVROverlayError>(0, err);
+			*ptr_out = nullptr;
+			*size_out = 0;
+			rc = err;
+		}
+		else
+		{
+			uint32_t size = width_query * height_query * 4;
+			uint8_t *ptr = (uint8_t *)malloc(size);
+			vr::EVROverlayError err = ovi->GetOverlayImageData(ulOverlayHandle, ptr, size, &width_query, &height_query);
+			if (err != vr::VROverlayError_None)
+			{
+				free(ptr);
+				*width_out = make_scalar<uint32_t, EVROverlayError>(0, err);
+				*height_out = make_scalar<uint32_t, EVROverlayError>(0, err);
+				*ptr_out = nullptr;
+				*size_out = 0;
+				rc = err;
+			}
+			else
+			{
+				*width_out = make_scalar<uint32_t, EVROverlayError>(width_query, err);
+				*height_out = make_scalar<uint32_t, EVROverlayError>(height_query, err);
+				*ptr_out = ptr;
+				*size_out = size;
+				rc = err;
+			}
+		}
+
+		return rc;
+	}
+
+	void FreeImageData(void *ptr)
+	{
+		free(ptr);
+	}
+
 	SCALAR_WRAP_INDEXED(IVROverlay, ovi, uint32_t, GetOverlayRenderingPid,	VROverlayHandle_t);
 	SCALAR_WRAP_INDEXED(IVROverlay, ovi, bool, IsOverlayVisible,			VROverlayHandle_t);
 	SCALAR_WRAP_INDEXED(IVROverlay, ovi, bool, IsHoverTargetOverlay,		VROverlayHandle_t);
@@ -3768,6 +3827,9 @@ static void visit_system_node(
 
 			if (visitor.visit_openvr())
 			{
+				memset(raw_pose_array, 0, sizeof(raw_pose_array));	// 2/6/2017 - on error this stuff should be zero
+				memset(standing_pose_array, 0, sizeof(standing_pose_array));
+				memset(seated_pose_array, 0, sizeof(seated_pose_array));
 				sysi->GetDeviceToAbsoluteTrackingPose(TrackingUniverseRawAndUncalibrated, 
 									tracker_config.predicted_seconds_to_photon, raw_pose_array, vr::k_unMaxTrackedDeviceCount);
 
@@ -4299,6 +4361,17 @@ static void visit_per_overlay(
 		visitor.visit_node(ss->overlays[overlay_index].overlay_key.item, key.c_str(), key.size() + 1);
 		visitor.visit_node(ss->overlays[overlay_index].overlay_handle.item, handle);
 		visitor.visit_node(ss->overlays[overlay_index].overlay_name.item, name.s.buf(), name.result_code, name.count);
+
+		scalar_result<uint32_t, EVROverlayError> width;
+		scalar_result<uint32_t, EVROverlayError> height;
+		uint8_t *ptr;
+		uint32_t size;
+		EVROverlayError err = wrap.GetImageData(handle.val,&width, &height, &ptr, &size);
+		visitor.visit_node(ss->overlays[overlay_index].overlay_image_width.item, width);
+		visitor.visit_node(ss->overlays[overlay_index].overlay_image_height.item, height);
+		visitor.visit_node(ss->overlays[overlay_index].overlay_image_data.item, ptr, err, size);
+		wrap.FreeImageData(ptr);
+
 		visitor.visit_node(ss->overlays[overlay_index].overlay_rendering_pid.item, wrap.GetOverlayRenderingPid(handle.val));
 	}
 	else
@@ -4306,6 +4379,11 @@ static void visit_per_overlay(
 		visitor.visit_node(ss->overlays[overlay_index].overlay_key.item);
 		visitor.visit_node(ss->overlays[overlay_index].overlay_handle.item);
 		visitor.visit_node(ss->overlays[overlay_index].overlay_name.item);
+
+		visitor.visit_node(ss->overlays[overlay_index].overlay_image_width.item);
+		visitor.visit_node(ss->overlays[overlay_index].overlay_image_height.item);
+		visitor.visit_node(ss->overlays[overlay_index].overlay_image_data.item);
+
 		visitor.visit_node(ss->overlays[overlay_index].overlay_rendering_pid.item);
 	}
 }
@@ -6775,6 +6853,7 @@ public:
 	EVROverlayError FindOverlay(const char *pchOverlayKey, VROverlayHandle_t * pOverlayHandle) override;
 	uint32_t GetOverlayKey(vr::VROverlayHandle_t ulOverlayHandle, char * pchValue, uint32_t unBufferSize, vr::EVROverlayError * pError) override;
 	uint32_t GetOverlayName(vr::VROverlayHandle_t ulOverlayHandle, char * pchValue, uint32_t unBufferSize, vr::EVROverlayError * pError) override;
+	vr::EVROverlayError GetOverlayImageData(vr::VROverlayHandle_t ulOverlayHandle, void * pvBuffer, uint32_t unBufferSize, uint32_t * punWidth, uint32_t * punHeight) override;
 
 };
 
@@ -6898,6 +6977,46 @@ uint32_t VROverlayCursor::GetOverlayName(vr::VROverlayHandle_t ulOverlayHandle, 
 	LOOKUP_OVERLAY_STRING(overlay_name);
 
 	LOG_EXIT_RC(rc, "CppStubGetOverlayName");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayImageData(
+	vr::VROverlayHandle_t ulOverlayHandle, void * pvBuffer, uint32_t unBufferSize, uint32_t * punWidth, uint32_t * punHeight)
+{
+	LOG_ENTRY("CppStubGetOverlayImageData");
+	
+	int index; 
+	vr::EVROverlayError rc = GetOverlayIndexForHandle(ulOverlayHandle, &index); 
+	
+	if (rc == vr::VROverlayError_None)
+	{
+		SYNC_OVERLAY_STATE(height, overlays[index].overlay_image_height); 
+		SYNC_OVERLAY_STATE(width, overlays[index].overlay_image_width);
+		SYNC_OVERLAY_STATE(data, overlays[index].overlay_image_data);
+
+		if (data->is_present())
+		{
+			if (punWidth)
+			{
+				*punWidth = width->val;
+			}
+			if (punHeight)
+			{
+				*punHeight = height->val;
+			}
+
+			uint8_t *ptr = (uint8_t*)pvBuffer;
+			if (!util_vector_to_return_buf_rc(&data->val, ptr, unBufferSize, nullptr))
+			{
+				rc = VROverlayError_ArrayTooSmall;
+			}
+		}
+		else
+		{
+			rc = data->presence;
+		}
+	}
+
+	LOG_EXIT_RC(rc, "CppStubGetOverlayImageData");
 }
 
 
@@ -7035,7 +7154,7 @@ vr::EVRRenderModelError VRRenderModelsCursor::LoadRenderModel_Async(const char *
 
 		if (vertex_data->is_present())
 		{
-			vr::RenderModel_t *m = new RenderModel_t;
+			vr::RenderModel_t *m = new RenderModel_t;						// allocation to return to apps. caller calls FreeRenderModel
 			m->rIndexData = &index_data->val.at(0);
 			m->unTriangleCount = index_data->val.size() / 3;
 			m->rVertexData = &vertex_data->val.at(0);
