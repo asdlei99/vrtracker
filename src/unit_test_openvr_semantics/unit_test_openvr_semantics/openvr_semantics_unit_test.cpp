@@ -310,7 +310,6 @@ void compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 			uninit(abuf2, asize);
 			uint32_t aret2 = a->resi->LoadSharedResource(apathbuffer, abuf2, asize);
 			dprintf("LoadSharedResource result %d\n", aret2);
-			free(abuf2);
 
 			char *bbuf2 = (char *)malloc(asize);
 			uninit(bbuf2, asize);

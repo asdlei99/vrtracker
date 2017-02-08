@@ -6308,8 +6308,9 @@ uint32_t VRApplicationsCursor::GetApplicationsThatSupportMimeType(const char * p
 uint32_t VRApplicationsCursor::GetApplicationLaunchArguments(uint32_t unHandle, char * pchArgs, uint32_t unArgs)
 {
 	LOG_ENTRY("CppStubGetApplicationLaunchArguments");
-	assert(0); // todo
-	uint32_t rc = 2;
+
+	application_launch_arguments
+	
 	LOG_EXIT_RC(rc, "CppStubGetApplicationLaunchArguments");
 }
 
@@ -8376,7 +8377,8 @@ public:
 
 	bool GetIndexForResourceName(const char *pchResourceName, int *index);
 	bool GetIndexForResourceNameAndDirectory(const char *pchResourceName, const char *pchDirectoryName, int *index);
-	bool GetIndexWithFallback(const char * pchResourceName, int *index);
+	bool GetIndexForFullPath(const char *pchResourceName, int *index);
+	bool GetIndexWithFallbacks(const char * pchResourceName, int *index);
 
 	uint32_t LoadSharedResource(const char * pchResourceName, char * pchBuffer, uint32_t unBufferLen) override;
 	uint32_t GetResourceFullPath(const char * pchResourceName, const char * pchResourceTypeDirectory, char * pchPathBuffer, uint32_t unBufferLen) override;
@@ -8430,17 +8432,35 @@ bool VRResourcesCursor::GetIndexForResourceNameAndDirectory(
 	return rc;
 }
 
-bool VRResourcesCursor::GetIndexWithFallback(const char * pchResourceName, int *index_ret)
+// search based on the full path
+bool VRResourcesCursor::GetIndexForFullPath(const char *pchResourceName, int *index)
 {
 	bool rc = false;
-	int index;
+	SynchronizeChildVectors();
+	for (int i = 0; i < (int)iter_ref.resources.size(); i++)
+	{
+		SYNC_RESOURCE_STATE(full, resources[i].resource_full_path);
 
-	if (GetIndexForResourceName(pchResourceName, &index))
+		if ((full->is_present() && util_char_vector_cmp(pchResourceName, full->val) == 0))
+		{
+			*index = i;
+			rc = true;
+			break;
+		}
+	}
+	return rc;
+}
+
+bool VRResourcesCursor::GetIndexWithFallbacks(const char * pchResourceName, int *index_ret)
+{
+	bool rc = false;
+
+	if (GetIndexForResourceName(pchResourceName, index_ret))
 	{
 		rc = true;
-		*index_ret = index;
 	}
-	else
+	
+	if (rc == false)
 	{
 		// resource name might have a directory embedded in it: e.g. "icons/banana.txt"
 		const char *slash = nullptr;
@@ -8452,13 +8472,19 @@ bool VRResourcesCursor::GetIndexWithFallback(const char * pchResourceName, int *
 		if (slash)
 		{
 			std::string dir(pchResourceName, slash - pchResourceName);
-			if (GetIndexForResourceNameAndDirectory(slash+1, dir.c_str(), &index))
+			if (GetIndexForResourceNameAndDirectory(slash+1, dir.c_str(), index_ret))
 			{
 				rc = true;
-				*index_ret = index;
 			}
 		}
 	}
+
+	// might be the full path
+	if (rc == false)
+	{
+		rc = GetIndexForFullPath(pchResourceName, index_ret);
+	}
+	
 	return rc;
 }
 
@@ -8469,7 +8495,7 @@ uint32_t VRResourcesCursor::LoadSharedResource(const char * pchResourceName, cha
 
 	int resource_index;
 	uint32_t rc = 0; 
-	if (GetIndexWithFallback(pchResourceName, &resource_index))
+	if (GetIndexWithFallbacks(pchResourceName, &resource_index))
 	{
 		SYNC_RESOURCE_STATE(data, resources[resource_index].resource_data);
 		if (data->is_present())
