@@ -27,12 +27,13 @@ void compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnder
 void compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
 void compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
 void compare_remi_strange_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
-void compare_trackedcamera_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
 void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
 void compare_exdi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-
+void compare_taci_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
 
 void interactive_component_state_test(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
+
+
 
 
 
@@ -152,8 +153,9 @@ int main()
 	compare_strange_interfaces(&raw, &cursor);
 	compare_compi_interfaces(&raw, &cursor, c);
 	compare_ovi_interfaces(&raw, &cursor, c);
-#endif
 	compare_exdi_interfaces(&raw, &cursor, c);
+#endif
+	compare_taci_interfaces(&raw, &cursor, c);
 
 
 	bool do_interactive = false;
@@ -164,6 +166,63 @@ int main()
 
     return 0;
 }
+
+static uint64_t uninit_u64()
+{
+	uint64_t ret; 
+	ret = 11;
+	return ret;
+}
+
+static bool uninit_bool()
+{
+	return true;
+}
+
+static int uninit_int()
+{
+	return 11;
+}
+
+uint32_t uninit_uint()
+{
+	return 3;
+}
+
+float uninit_float()
+{
+	return 7.0f;
+}
+
+vr::HmdMatrix34_t uninit_m34()
+{
+	vr::HmdMatrix34_t ret;
+	memset(&ret, 7, sizeof(ret));
+	return ret;
+}
+
+vr::VRTextureBounds_t uninit_texturebounds()
+{
+	vr::VRTextureBounds_t ret;
+	memset(&ret, 7, sizeof(ret));
+	return ret;
+}
+
+template <size_t count>
+void uninit(char(&s)[count])
+{
+	s[0] = 3;
+	s[1] = '\0';
+}
+
+vr::HmdVector2_t uninit_vec2()
+{
+	vr::HmdVector2_t a;
+	a.v[0] = 3;
+	a.v[0] = 4;
+	return a;
+}
+
 
 
 void compare_exdi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
@@ -176,11 +235,14 @@ void compare_exdi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 
 	{
 		//virtual void GetWindowBounds(int32_t *pnX, int32_t *pnY, uint32_t *pnWidth, uint32_t *pnHeight) = 0;
-		int ax, ay;
-		uint32_t aw, ah;
+		int ax = uninit_int();
+		int ay = uninit_int();
+		uint32_t aw = uninit_uint();
+		uint32_t ah = uninit_uint();
 		a->exdi->GetWindowBounds(&ax, &ay, &aw, &ah);
 
-		int bx, by;
+		int bx = uninit_int();
+		int by(uninit_int());
 		uint32_t bw, bh;
 		b->exdi->GetWindowBounds(&bx, &by, &bw, &bh);
 		assert(ax == bx);
@@ -280,14 +342,14 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 	}
 
 	{
-		float ared = 0.0f;
-		float agreen = 0.0f;
-		float ablue = 0.0f;
+		float ared(uninit_float());
+		float agreen(uninit_float());
+		float ablue(uninit_float());
 		vr::EVROverlayError reta = a->ovi->GetOverlayColor(overlay_handle_a, &ared, &agreen, &ablue);
 
-		float bred = 0.0f;
-		float bgreen = 0.0f;
-		float bblue = 0.0f;
+		float bred(uninit_float());
+		float bgreen(uninit_float());
+		float bblue(uninit_float());
 		vr::EVROverlayError retb = b->ovi->GetOverlayColor(overlay_handle_b, &bred, &bgreen, &bblue);
 
 		assert(ared == bred);
@@ -297,18 +359,18 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 	}
 
 	{
-		float aalpha = 0;
+		float aalpha(uninit_float());
 		vr::EVROverlayError reta = a->ovi->GetOverlayAlpha(overlay_handle_a, &aalpha);
 
-		float balpha = 0;
+		float balpha(uninit_float());
 		vr::EVROverlayError retb = b->ovi->GetOverlayAlpha(overlay_handle_b, &balpha);
 		assert(reta == retb);
 		assert(aalpha == balpha);
 	}
 
 	{
-		float texelaspecta = 0;
-		float texelaspectb = 0;
+		float texelaspecta(uninit_float());
+		float texelaspectb(uninit_float());
 		vr::EVROverlayError reta = a->ovi->GetOverlayTexelAspect(overlay_handle_a, &texelaspecta);
 		vr::EVROverlayError retb = b->ovi->GetOverlayTexelAspect(overlay_handle_b, &texelaspectb);
 		assert(reta == retb);
@@ -316,17 +378,17 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 	}
 
 	{
-		uint32_t sort_ordera = 0;
+		uint32_t sort_ordera(uninit_uint());
 		vr::EVROverlayError reta = a->ovi->GetOverlaySortOrder(overlay_handle_a, &sort_ordera);
-		uint32_t sort_orderb = 0;
+		uint32_t sort_orderb(uninit_uint());
 		vr::EVROverlayError retb = b->ovi->GetOverlaySortOrder(overlay_handle_b, &sort_orderb);
 		assert(sort_ordera == sort_orderb);
 		assert(reta == retb);
 	}
 
 	{
-		float width_in_metersa = 0;
-		float width_in_metersb = 0;
+		float width_in_metersa(uninit_float());
+		float width_in_metersb(uninit_float());
 		vr::EVROverlayError reta = a->ovi->GetOverlayWidthInMeters(overlay_handle_a, &width_in_metersa);
 		vr::EVROverlayError retb = b->ovi->GetOverlayWidthInMeters(overlay_handle_b, &width_in_metersb);
 		assert(reta == retb);
@@ -334,13 +396,13 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 	}
 
 	{
-		float MinDistanceInMetersa = 0;
-		float MaxDistanceInMetersa = 0;
+		float MinDistanceInMetersa(uninit_float());
+		float MaxDistanceInMetersa(uninit_float());
 		vr::EVROverlayError reta = a->ovi->GetOverlayAutoCurveDistanceRangeInMeters(overlay_handle_a,
 			&MinDistanceInMetersa, &MaxDistanceInMetersa);
 
-		float MinDistanceInMetersb = 0;
-		float MaxDistanceInMetersb = 0;
+		float MinDistanceInMetersb(uninit_float());
+		float MaxDistanceInMetersb(uninit_float());
 		vr::EVROverlayError retb = b->ovi->GetOverlayAutoCurveDistanceRangeInMeters(overlay_handle_b,
 			&MinDistanceInMetersb, &MaxDistanceInMetersb);
 		assert(reta == retb);
@@ -349,42 +411,42 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 	}
 
 	{
-		vr::EColorSpace color_spacea;
+		vr::EColorSpace color_spacea= (vr::EColorSpace)(uninit_int());
 		vr::EVROverlayError reta = a->ovi->GetOverlayTextureColorSpace(overlay_handle_a, &color_spacea);
 
-		vr::EColorSpace color_spaceb;
+		vr::EColorSpace color_spaceb = (vr::EColorSpace)(uninit_int());
 		vr::EVROverlayError retb = b->ovi->GetOverlayTextureColorSpace(overlay_handle_b, &color_spaceb);
 		assert(color_spacea == color_spaceb);
 		assert(reta == retb);
 	}
 
 	{
-		vr::VRTextureBounds_t texture_boundsa;
+		vr::VRTextureBounds_t texture_boundsa = uninit_texturebounds();
 		vr::EVROverlayError reta = a->ovi->GetOverlayTextureBounds(overlay_handle_a, &texture_boundsa);
 
-		vr::VRTextureBounds_t texture_boundsb;
+		vr::VRTextureBounds_t texture_boundsb = uninit_texturebounds();
 		vr::EVROverlayError retb = b->ovi->GetOverlayTextureBounds(overlay_handle_b, &texture_boundsb);
 		assert(texture_boundsa == texture_boundsb);
 		assert(reta == retb);
 	}
 
 	{
-		vr::VROverlayTransformType transform_typea;
+		vr::VROverlayTransformType transform_typea = (vr::VROverlayTransformType)(uninit_int());
 		vr::EVROverlayError reta = a->ovi->GetOverlayTransformType(overlay_handle_a, &transform_typea);
 
-		vr::VROverlayTransformType transform_typeb;
+		vr::VROverlayTransformType transform_typeb = (vr::VROverlayTransformType)(uninit_int());
 		vr::EVROverlayError retb = b->ovi->GetOverlayTransformType(overlay_handle_b, &transform_typeb);
 		assert(transform_typea == transform_typeb);
 		assert(reta == retb);
 	}
 
 	{
-		vr::ETrackingUniverseOrigin eTrackingOrigina;
-		vr::HmdMatrix34_t			matTrackingOriginToOverlayTransforma;
+		vr::ETrackingUniverseOrigin eTrackingOrigina = (vr::ETrackingUniverseOrigin)(uninit_int());
+		vr::HmdMatrix34_t			matTrackingOriginToOverlayTransforma = uninit_m34();
 		vr::EVROverlayError reta = a->ovi->GetOverlayTransformAbsolute(overlay_handle_a, &eTrackingOrigina, &matTrackingOriginToOverlayTransforma);
 
-		vr::ETrackingUniverseOrigin eTrackingOriginb;
-		vr::HmdMatrix34_t			matTrackingOriginToOverlayTransformb;
+		vr::ETrackingUniverseOrigin eTrackingOriginb = (vr::ETrackingUniverseOrigin)(uninit_int());;
+		vr::HmdMatrix34_t			matTrackingOriginToOverlayTransformb = uninit_m34();
 		vr::EVROverlayError retb = b->ovi->GetOverlayTransformAbsolute(overlay_handle_b, &eTrackingOriginb, &matTrackingOriginToOverlayTransformb);
 
 		assert(reta == retb);
@@ -393,14 +455,14 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 	}
 
 	{
-		vr::TrackedDeviceIndex_t	unTrackedDevicea;
-		vr::HmdMatrix34_t			matTrackedDeviceToOverlayTransforma;
+		vr::TrackedDeviceIndex_t	unTrackedDevicea = uninit_int();
+		vr::HmdMatrix34_t			matTrackedDeviceToOverlayTransforma = uninit_m34();
 		vr::EVROverlayError reta = a->ovi->GetOverlayTransformTrackedDeviceRelative(overlay_handle_a,
 			&unTrackedDevicea,
 			&matTrackedDeviceToOverlayTransforma);
 
-		vr::TrackedDeviceIndex_t	unTrackedDeviceb;
-		vr::HmdMatrix34_t			matTrackedDeviceToOverlayTransformb;
+		vr::TrackedDeviceIndex_t	unTrackedDeviceb = uninit_int();;
+		vr::HmdMatrix34_t			matTrackedDeviceToOverlayTransformb = uninit_m34();
 		vr::EVROverlayError retb = b->ovi->GetOverlayTransformTrackedDeviceRelative(overlay_handle_b,
 			&unTrackedDeviceb,
 			&matTrackedDeviceToOverlayTransformb);
@@ -410,13 +472,15 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 	}
 
 	{
-		vr::TrackedDeviceIndex_t device_indexa;
+		vr::TrackedDeviceIndex_t device_indexa = uninit_int();
 		char chComponentNamea[256];
+		uninit(chComponentNamea);
 		vr::EVROverlayError reta = a->ovi->GetOverlayTransformTrackedDeviceComponent(
 			overlay_handle_a, &device_indexa, chComponentNamea, sizeof(chComponentNamea));
 		
-		vr::TrackedDeviceIndex_t device_indexb;
+		vr::TrackedDeviceIndex_t device_indexb = uninit_int();
 		char chComponentNameb[256];
+		uninit(chComponentNameb);
 		vr::EVROverlayError retb = b->ovi->GetOverlayTransformTrackedDeviceComponent(
 			overlay_handle_b, &device_indexb, chComponentNameb, sizeof(chComponentNameb));
 		assert(device_indexa == device_indexb);
@@ -424,19 +488,19 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 	}
 
 	{
-		vr::VROverlayInputMethod input_methoda;
+		vr::VROverlayInputMethod input_methoda = (vr::VROverlayInputMethod)uninit_int();
 		vr::EVROverlayError rca = a->ovi->GetOverlayInputMethod(overlay_handle_a, &input_methoda);
-		vr::VROverlayInputMethod input_methodb;
+		vr::VROverlayInputMethod input_methodb = (vr::VROverlayInputMethod)uninit_int();
 		vr::EVROverlayError rcb = b->ovi->GetOverlayInputMethod(overlay_handle_b, &input_methodb);
 		assert(input_methoda == input_methodb);
 		assert(rca == rcb);
 	}
 
 	{
-		vr::HmdVector2_t mouse_scalea;
+		vr::HmdVector2_t mouse_scalea = uninit_vec2();
 		vr::EVROverlayError rca = a->ovi->GetOverlayMouseScale(overlay_handle_a, &mouse_scalea);
 
-		vr::HmdVector2_t mouse_scaleb;
+		vr::HmdVector2_t mouse_scaleb = uninit_vec2();
 		vr::EVROverlayError rcb = b->ovi->GetOverlayMouseScale(overlay_handle_a, &mouse_scaleb);
 
 		assert(mouse_scalea == mouse_scaleb);
@@ -450,12 +514,12 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 	}
 
 	{
-		uint32_t widtha = 0;
-		uint32_t heighta = 0;
+		uint32_t widtha = uninit_int();
+		uint32_t heighta = uninit_int();
 		vr::EVROverlayError rca = a->ovi->GetOverlayTextureSize(overlay_handle_a, &widtha, &heighta);
 
-		uint32_t widthb = 0;
-		uint32_t heightb = 0;
+		uint32_t widthb = uninit_int();
+		uint32_t heightb = uninit_int();
 		vr::EVROverlayError rcb = b->ovi->GetOverlayTextureSize(overlay_handle_b, &widthb, &heightb);
 		assert(widtha == widthb);
 		assert(heighta == heightb);
@@ -469,9 +533,9 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 	}
 
 	{
-		uint32_t process_id_a;
+		uint32_t process_id_a = uninit_int();
 		vr::EVROverlayError rca = a->ovi->GetDashboardOverlaySceneProcess(overlay_handle_a, &process_id_a);
-		uint32_t process_id_b;
+		uint32_t process_id_b = uninit_int();
 		vr::EVROverlayError rcb = b->ovi->GetDashboardOverlaySceneProcess(overlay_handle_b, &process_id_b);
 		assert(rca == rcb);
 		assert(process_id_a == process_id_b);
@@ -485,9 +549,11 @@ void compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
 
 	{
 		char bufa[256];
+		uninit(bufa);
 		uint32_t rca = a->ovi->GetKeyboardText(bufa, sizeof(bufa));
 
 		char bufb[256];
+		uninit(bufb);
 		uint32_t rcb = a->ovi->GetKeyboardText(bufb, sizeof(bufb));
 
 		assert(rcb == rca);
@@ -505,14 +571,11 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	// create overlays per TrackerConfig
 	for (int i = 0; i < c.num_overlays_to_sample; i++)
 	{
-		vr::VROverlayHandle_t overlay_handle_a;
+		vr::VROverlayHandle_t overlay_handle_a = uninit_u64();
 		std::string friendly_name = std::string(c.overlay_keys_to_sample[i]) + "friendly";
 		vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_a);
 
-		float alpha = -77.0f;
-		a->ovi->GetOverlayAlpha(22, &alpha);
-		
-		vr::VROverlayHandle_t overlay_handle_b;
+		vr::VROverlayHandle_t overlay_handle_b = uninit_u64();
 		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_b);
 		assert(errora == errorb);	
 	}
@@ -528,10 +591,10 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	// find handles for keys
 	for (int i = 0; i < c.num_overlays_to_sample; i++)
 	{
-		vr::VROverlayHandle_t overlay_handle_a;
+		vr::VROverlayHandle_t overlay_handle_a = uninit_u64();
 		vr::EVROverlayError errora = a->ovi->FindOverlay(c.overlay_keys_to_sample[i], &overlay_handle_a);
 
-		vr::VROverlayHandle_t overlay_handle_b;
+		vr::VROverlayHandle_t overlay_handle_b = uninit_u64();
 		vr::EVROverlayError errorb = b->ovi->FindOverlay(c.overlay_keys_to_sample[i], &overlay_handle_b);
 
 		a_handles.push_back(overlay_handle_a);
@@ -546,11 +609,13 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	for (int i = 0; i < c.num_overlays_to_sample; i++)
 	{
 		char szbufa[256];
-		vr::EVROverlayError erra;
+		uninit(szbufa);
+		vr::EVROverlayError erra = (vr::EVROverlayError)uninit_int();
 		uint32_t a_ret = a->ovi->GetOverlayKey(a_handles[i], szbufa, sizeof(szbufa), &erra);
 
 		char szbufb[256];
-		vr::EVROverlayError errb;
+		uninit(szbufb);
+		vr::EVROverlayError errb = (vr::EVROverlayError)uninit_int();
 		uint32_t b_ret = b->ovi->GetOverlayKey(b_handles[i], szbufb, sizeof(szbufb), &errb);
 
 		assert(erra == errb);
@@ -561,11 +626,13 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	// try an invalid handle 0x22 - expect error code
 	{
 		char szbufa[256];
-		vr::EVROverlayError erra;
+		uninit(szbufa);
+		vr::EVROverlayError erra = (vr::EVROverlayError)uninit_int();
 		uint32_t a_ret = a->ovi->GetOverlayKey(0x22, szbufa, sizeof(szbufa), &erra);
 
 		char szbufb[256];
-		vr::EVROverlayError errb;
+		uninit(szbufb);
+		vr::EVROverlayError errb = (vr::EVROverlayError)uninit_int();
 		uint32_t b_ret = b->ovi->GetOverlayKey(0x22, szbufb, sizeof(szbufb), &errb);
 		assert(erra != vr::VROverlayError_None);
 		assert(errb != vr::VROverlayError_None);
@@ -576,10 +643,10 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 
 	// try an invalid name - expect error code
 	{
-		vr::VROverlayHandle_t overlay_handle_a;
+		vr::VROverlayHandle_t overlay_handle_a = uninit_u64();
 		vr::EVROverlayError errora = a->ovi->FindOverlay("invalid", &overlay_handle_a);
 
-		vr::VROverlayHandle_t overlay_handle_b;
+		vr::VROverlayHandle_t overlay_handle_b = uninit_u64();
 		vr::EVROverlayError errorb = b->ovi->FindOverlay("invalid", &overlay_handle_b);
 
 		assert(errora == errorb);
@@ -590,7 +657,8 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	{
 		vr::EVROverlayError destroyerrora = a->ovi->DestroyOverlay(a_handles[0]);
 		char szbufa[256];
-		vr::EVROverlayError queryerra;
+		uninit(szbufa);
+		vr::EVROverlayError queryerra = (vr::EVROverlayError)uninit_int();
 		uint32_t a_ret = a->ovi->GetOverlayKey(a_handles[0], szbufa, sizeof(szbufa), &queryerra); // should be invalid
 
 		vr::EVROverlayError destroyerrorb = b->ovi->DestroyOverlay(b_handles[0]);
@@ -599,7 +667,7 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 		ib->Refresh();
 
 		char szbufb[256];
-		vr::EVROverlayError queryerrb;
+		vr::EVROverlayError queryerrb = (vr::EVROverlayError)uninit_int();
 		uint32_t b_ret = b->ovi->GetOverlayKey(b_handles[0], szbufb, sizeof(szbufb), &queryerrb); // should be invalid
 		assert(a_ret == b_ret);
 		assert(queryerra == queryerrb);
@@ -607,22 +675,22 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 
 	{
 		// add it back in
-		vr::VROverlayHandle_t overlay_handle_a;
-		vr::VROverlayHandle_t overlay_handle_b;
+		vr::VROverlayHandle_t overlay_handle_a = uninit_u64();
+		vr::VROverlayHandle_t overlay_handle_b = uninit_u64();
 		std::string friendly_name = std::string(c.overlay_keys_to_sample[0]) + "friendly";
 		vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys_to_sample[0], friendly_name.c_str(), &overlay_handle_a);
 		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[0], friendly_name.c_str(), &overlay_handle_b);
 		assert(errora == errorb);
 
 
-		vr::VROverlayHandle_t found_overlay_handle_a;
+		vr::VROverlayHandle_t found_overlay_handle_a = uninit_u64();
 		vr::EVROverlayError found_errora = a->ovi->FindOverlay(c.overlay_keys_to_sample[0], &found_overlay_handle_a);
 
 		// give b a chance to detect the new overlay
 		ia->Refresh();
 		ib->Refresh();
 
-		vr::VROverlayHandle_t found_overlay_handle_b;
+		vr::VROverlayHandle_t found_overlay_handle_b = uninit_u64();
 		vr::EVROverlayError found_errorb = b->ovi->FindOverlay(c.overlay_keys_to_sample[0], &found_overlay_handle_b);
 		assert(found_errora == found_errorb);
 		assert(found_overlay_handle_a == found_overlay_handle_b);
@@ -635,11 +703,13 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 	for (int i = 0; i < c.num_overlays_to_sample; i++)
 	{
 		char szbufa[256];
-		vr::EVROverlayError erra;
+		uninit(szbufa);
+		vr::EVROverlayError erra = (vr::EVROverlayError)uninit_int();
 		uint32_t a_ret = a->ovi->GetOverlayName(a_handles[i], szbufa, sizeof(szbufa), &erra);
 
 		char szbufb[256];
-		vr::EVROverlayError errb;
+		uninit(szbufb);
+		vr::EVROverlayError errb = (vr::EVROverlayError)uninit_int();
 		uint32_t b_ret = b->ovi->GetOverlayName(b_handles[i], szbufb, sizeof(szbufb), &errb);
 
 		assert(erra == errb);
@@ -1662,7 +1732,7 @@ void compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 
 }
 
-void compare_trackedcamera_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib)
+void compare_taci_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
@@ -1690,6 +1760,65 @@ void compare_trackedcamera_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterf
 	rcb = b->taci->HasCamera(1, &has_camerab);
 	assert(rca == rcb);
 	assert(has_cameraa == has_camerab);
+
+
+	// HasCamera across devices
+	for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
+	{
+		for (int j = 0; j < vr::MAX_CAMERA_FRAME_TYPES; j++)
+		{
+			bool has_cameraa = uninit_bool();
+			bool has_camerab = uninit_bool();
+			vr::EVRTrackedCameraError rca = a->taci->HasCamera(1, &has_cameraa);
+			vr::EVRTrackedCameraError rcb = b->taci->HasCamera(1, &has_camerab);
+		}
+	}
+
+
+	// FrameSize
+	for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
+	{
+		for (int j = 0; j < vr::MAX_CAMERA_FRAME_TYPES; j++)
+		{
+			uint32_t wa, ha, sizea;
+			uint32_t wb, hb, sizeb;
+			vr::EVRTrackedCameraError rca = a->taci->GetCameraFrameSize(i, (vr::EVRTrackedCameraFrameType)j, &wa, &ha, &sizea);
+			vr::EVRTrackedCameraError rcb = b->taci->GetCameraFrameSize(i, (vr::EVRTrackedCameraFrameType)j, &wb, &hb, &sizeb);
+			assert(rca == rcb);
+			assert(wa == wb);
+			assert(ha == hb);
+			assert(sizea == sizeb);
+		}
+	}
+
+	for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
+	{
+		for (int j = 0; j < vr::MAX_CAMERA_FRAME_TYPES; j++)
+		{
+			vr::HmdVector2_t focal_lena;
+			vr::HmdVector2_t center_lena;
+			vr::HmdVector2_t focal_lenb;
+			vr::HmdVector2_t center_lenb;
+			vr::EVRTrackedCameraError rca = a->taci->GetCameraIntrinsics(i, (vr::EVRTrackedCameraFrameType)j, &focal_lena, &center_lena);
+			vr::EVRTrackedCameraError rcb = b->taci->GetCameraIntrinsics(i, (vr::EVRTrackedCameraFrameType)j, &focal_lenb, &center_lenb);
+			assert(rca == rcb);
+			assert(focal_lena == focal_lenb);
+			assert(center_lena == center_lenb);
+		}
+	}
+
+	for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
+	{
+		for (int j = 0; j < vr::MAX_CAMERA_FRAME_TYPES; j++)
+		{
+			vr::HmdMatrix44_t projectiona;
+			vr::HmdMatrix44_t projectionb;
+			vr::EVRTrackedCameraError rca = a->taci->GetCameraProjection(i, (vr::EVRTrackedCameraFrameType)j, c.nearz, c.farz, &projectiona);
+			vr::EVRTrackedCameraError rcb = b->taci->GetCameraProjection(i, (vr::EVRTrackedCameraFrameType)j, c.nearz, c.farz, &projectionb);
+			assert(rca == rcb);
+			assert(projectiona == projectionb);
+		}
+	}
 }
 
 
