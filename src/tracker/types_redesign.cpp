@@ -1782,12 +1782,14 @@ struct vrschema
 			INIT(overlay_mouse_scale),
 			INIT(overlay_is_hover_target),
 			INIT(overlay_is_visible),
+			INIT(overlay_is_active_dashboard),
 			INIT(overlay_texture_size),
+			INIT(overlay_dashboard_scene_process),
 			INIT(events)
 		{}
 
 		VDECL(overlay_key, AlwaysAndForever, char);
-		SDECL(overlay_handle, EVROverlayError, vr::VROverlayHandle_t);   // i'm assuming handles can be reused - but keys are unique
+		SDECL(overlay_handle, EVROverlayError, vr::VROverlayHandle_t);   // i'm assuming keys are unique, not handles - handles can be reused
 		VDECL(overlay_name, EVROverlayError, char);
 		
 		SDECL(overlay_image_width, EVROverlayError, uint32_t);
@@ -1814,8 +1816,9 @@ struct vrschema
 		SDECL(overlay_mouse_scale, EVROverlayError, HmdVector2_t);
 		SDECL(overlay_is_hover_target, AlwaysAndForever, bool);
 		SDECL(overlay_is_visible, AlwaysAndForever, bool);
+		SDECL(overlay_is_active_dashboard, AlwaysAndForever, bool);
 		SDECL(overlay_texture_size, EVROverlayError, Uint32Size);
-
+		SDECL(overlay_dashboard_scene_process, EVROverlayError, uint32_t);
 		SDECL(events, AlwaysAndForever, VREvent_t);	// experiment
 
 	};
@@ -1824,18 +1827,18 @@ struct vrschema
 	{
 		overlay_schema(ALLOCATOR_DECL)
 			:
+			INIT(gamepad_focus_overlay),
 			INIT(primary_dashboard_device),
 			INIT(is_dashboard_visible),
-			INIT(dashboard_scene_process),
 			INIT(active_overlay_indexes),
 			INIT(keyboard_text),
 			overlays(allocator),
 			overlay_helper(nullptr)
 		{}
 
+		SDECL(gamepad_focus_overlay, AlwaysAndForever, vr::VROverlayHandle_t);
 		SDECL(primary_dashboard_device, AlwaysAndForever, TrackedDeviceIndex_t);
 		SDECL(is_dashboard_visible, AlwaysAndForever, bool);
-		SDECL(dashboard_scene_process, EVROverlayError, uint32_t);
 		VDECL(active_overlay_indexes, AlwaysAndForever, int);
 		VDECL(keyboard_text, AlwaysAndForever, char);
 		
@@ -4443,7 +4446,11 @@ static void visit_per_overlay(
 	LEAF_SCALAR(overlay_input_method,				wrap.GetOverlayInputMethod(handle));
 	LEAF_SCALAR(overlay_mouse_scale,				wrap.GetOverlayMouseScale(handle));
 	LEAF_SCALAR(overlay_is_hover_target,			wrap.IsHoverTargetOverlay(handle));
+	LEAF_SCALAR(overlay_is_visible,					wrap.IsOverlayVisible(handle));
+	LEAF_SCALAR(overlay_is_active_dashboard,		wrap.IsActiveDashboardOverlay(handle));
+	LEAF_SCALAR(overlay_dashboard_scene_process,	wrap.GetDashboardOverlaySceneProcess(handle));
 	LEAF_SCALAR(overlay_texture_size,				wrap.GetOverlayTextureSize(handle));
+	
 
 	if (visitor.visit_openvr())
 	{
@@ -4579,6 +4586,7 @@ static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss
 								const TrackerConfigInternal &config,
 								ALLOCATOR_DECL)
 {
+	LEAF_SCALAR(gamepad_focus_overlay, ow.GetGamepadFocusOverlay());
 	LEAF_SCALAR(primary_dashboard_device, ow.GetPrimaryDashboardDevice());
 
 	if (visitor.visit_openvr())
@@ -7044,22 +7052,16 @@ if (pError)\
 uint32_t VROverlayCursor::GetOverlayKey(vr::VROverlayHandle_t ulOverlayHandle, char * pchValue, uint32_t unBufferSize, vr::EVROverlayError * pError)
 {
 	LOG_ENTRY("CppStubGetOverlayKey");
-
 	LOOKUP_OVERLAY_STRING(overlay_key);
-	
 	LOG_EXIT_RC(rc, "CppStubGetOverlayKey");
 }
 
 uint32_t VROverlayCursor::GetOverlayName(vr::VROverlayHandle_t ulOverlayHandle, char * pchValue, uint32_t unBufferSize, vr::EVROverlayError * pError)
 {
 	LOG_ENTRY("CppStubGetOverlayName");
-
 	LOOKUP_OVERLAY_STRING(overlay_name);
-
 	LOG_EXIT_RC(rc, "CppStubGetOverlayName");
 }
-
-
 
 uint32_t VROverlayCursor::GetOverlayRenderingPid(VROverlayHandle_t ulOverlayHandle)
 {
@@ -7095,6 +7097,13 @@ bool VROverlayCursor::IsHoverTargetOverlay(VROverlayHandle_t ulOverlayHandle)
 	OVERLAY_BOOL_LOOKUP(overlay_is_hover_target);
 }
 
+bool VROverlayCursor::IsActiveDashboardOverlay(vr::VROverlayHandle_t ulOverlayHandle)
+{
+	LOG_ENTRY("CppStubIsActiveDashboardOverlay");
+	OVERLAY_BOOL_LOOKUP(overlay_is_active_dashboard);
+	LOG_EXIT_RC(rc, "CppStubIsActiveDashboardOverlay");
+}
+
 EVROverlayError 
 VROverlayCursor::GetOverlayFlag(VROverlayHandle_t ulOverlayHandle, VROverlayFlags eOverlayFlag, bool *pbEnabled)
 {
@@ -7125,7 +7134,6 @@ VROverlayCursor::GetOverlayFlag(VROverlayHandle_t ulOverlayHandle, VROverlayFlag
 	}
 	return err;
 }
-
 
 vr::EVROverlayError VROverlayCursor::GetOverlayImageData(
 	vr::VROverlayHandle_t ulOverlayHandle, void * pvBuffer, uint32_t unBufferSize, uint32_t * punWidth, uint32_t * punHeight)
@@ -7187,7 +7195,7 @@ vr::EVROverlayError VROverlayCursor::GetOverlayColor(vr::VROverlayHandle_t ulOve
 			}
 			if (pfBlue)
 			{
-				*pfGreen = color->val.b;
+				*pfBlue = color->val.b;
 			}
 		}
 	}
@@ -7255,6 +7263,7 @@ if (rc == vr::VROverlayError_None)\
 			*param_name2 = state_val->val.schema_field2;\
 		}\
 	}\
+	rc = state_val->presence;\
 }
 
 vr::EVROverlayError VROverlayCursor::GetOverlayAutoCurveDistanceRangeInMeters(vr::VROverlayHandle_t ulOverlayHandle, 
@@ -7316,6 +7325,26 @@ vr::EVROverlayError VROverlayCursor::GetOverlayTransformTrackedDeviceComponent(
 {
 	LOG_ENTRY("CppStubGetOverlayTransformTrackedDeviceComponent");
 	
+	int index; 
+	vr::EVROverlayError rc = GetOverlayIndexForHandle(ulOverlayHandle, &index); 
+	if (rc == vr::VROverlayError_None)
+	{
+		SYNC_OVERLAY_STATE(device_index, overlays[index].overlay_transform_component_relative_device_index);
+		SYNC_OVERLAY_STATE(name, overlays[index].overlay_transform_component_relative_name);
+
+		if (device_index->is_present() && name->is_present())
+		{
+			if (punDeviceIndex)
+			{
+				*punDeviceIndex = device_index->val;
+			}
+			if (!util_vector_to_return_buf_rc(&name->val, pchComponentName, unComponentNameSize, nullptr))
+			{
+				rc = VROverlayError_ArrayTooSmall; // TODO: verify this is what happens if the buffer is too small
+			}
+		}
+	}
+
 	LOG_EXIT_RC(rc, "CppStubGetOverlayTransformTrackedDeviceComponent");
 }
 
@@ -7323,14 +7352,14 @@ vr::EVROverlayError VROverlayCursor::GetOverlayTransformTrackedDeviceComponent(
 vr::EVROverlayError VROverlayCursor::GetOverlayInputMethod(vr::VROverlayHandle_t ulOverlayHandle, vr::VROverlayInputMethod * peInputMethod)
 {
 	LOG_ENTRY("CppStubGetOverlayInputMethod");
-	static vr::EVROverlayError rc;
+	OVERLAY_VAL_LOOKUP(overlay_input_method, peInputMethod);
 	LOG_EXIT_RC(rc, "CppStubGetOverlayInputMethod");
 }
 
 vr::EVROverlayError VROverlayCursor::GetOverlayMouseScale(vr::VROverlayHandle_t ulOverlayHandle, struct vr::HmdVector2_t * pvecMouseScale)
 {
 	LOG_ENTRY("CppStubGetOverlayMouseScale");
-	static vr::EVROverlayError rc;
+	OVERLAY_VAL_LOOKUP(overlay_mouse_scale, pvecMouseScale);
 	LOG_EXIT_RC(rc, "CppStubGetOverlayMouseScale");
 }
 
@@ -7338,45 +7367,43 @@ vr::EVROverlayError VROverlayCursor::GetOverlayMouseScale(vr::VROverlayHandle_t 
 vr::VROverlayHandle_t VROverlayCursor::GetGamepadFocusOverlay()
 {
 	LOG_ENTRY("CppStubGetGamepadFocusOverlay");
-	static vr::VROverlayHandle_t rc;
+	vr::VROverlayHandle_t rc;
+	SYNC_OVERLAY_STATE(gamepad_focus_overlay, gamepad_focus_overlay);
+	rc = gamepad_focus_overlay->val;
 	LOG_EXIT_RC(rc, "CppStubGetGamepadFocusOverlay");
 }
 
 vr::EVROverlayError VROverlayCursor::GetOverlayTextureSize(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * pWidth, uint32_t * pHeight)
 {
 	LOG_ENTRY("CppStubGetOverlayTextureSize");
-	static vr::EVROverlayError rc;
+	OVERLAY_2_STRUCT_VAL_LOOKUP(overlay_texture_size,
+		width, height,
+		pWidth, pHeight);
 	LOG_EXIT_RC(rc, "CppStubGetOverlayTextureSize");
-}
-
-bool VROverlayCursor::IsActiveDashboardOverlay(vr::VROverlayHandle_t ulOverlayHandle)
-{
-	LOG_ENTRY("CppStubIsActiveDashboardOverlay");
-	static bool rc = true;
-	LOG_EXIT_RC(rc, "CppStubIsActiveDashboardOverlay");
 }
 
 vr::EVROverlayError VROverlayCursor::GetDashboardOverlaySceneProcess(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * punProcessId)
 {
 	LOG_ENTRY("CppStubGetDashboardOverlaySceneProcess");
-	static vr::EVROverlayError rc;
+	OVERLAY_VAL_LOOKUP(overlay_dashboard_scene_process, punProcessId);
 	LOG_EXIT_RC(rc, "CppStubGetDashboardOverlaySceneProcess");
 }
 
 uint32_t VROverlayCursor::GetKeyboardText(char * pchText, uint32_t cchText)
 {
 	LOG_ENTRY("CppStubGetKeyboardText");
-	static uint32_t rc = 0;
+	uint32_t rc;
+	SYNC_OVERLAY_STATE(keyboard_text, keyboard_text);
+	util_vector_to_return_buf_rc(&keyboard_text->val, pchText, cchText, &rc);
 	LOG_EXIT_RC(rc, "CppStubGetKeyboardText");
 }
 
 vr::EVROverlayError VROverlayCursor::GetOverlayFlags(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * pFlags)
 {
 	LOG_ENTRY("CppStubGetOverlayFlags");
-	static vr::EVROverlayError rc;
+	OVERLAY_VAL_LOOKUP(overlay_flags, pFlags);
 	LOG_EXIT_RC(rc, "CppStubGetOverlayFlags");
 }
-
 
 class VRRenderModelsCursor : public VRRenderModelsCppStub
 {
