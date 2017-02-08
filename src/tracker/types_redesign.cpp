@@ -1843,7 +1843,8 @@ struct vrschema
 		VDECL(keyboard_text, AlwaysAndForever, char);
 		
 		std::vector<per_overlay_state, ALLOCATOR_TYPE> overlays;
-		OverlayHelper *overlay_helper;
+		OverlayHelper *overlay_helper;	 // this helper is needed to be able to map from external keys to indexes into the overlays vector
+										 // used by: UpdateVisitor and by OverlayCursor
 	};
 
 	struct rendermodel_component_schema
@@ -1948,6 +1949,32 @@ struct vrschema
 		SDECL(right_output_viewport, AlwaysAndForever, ViewPort_t);
 	};
 
+	struct resource_schema
+	{
+		resource_schema(ALLOCATOR_DECL)
+			:
+			INIT(resource_name),
+			INIT(resource_directory),
+			INIT(resource_full_path),
+			INIT(resource_data)
+		{}
+
+		VDECL(resource_name, AlwaysAndForever, char);
+		VDECL(resource_directory, AlwaysAndForever, char);
+		VDECL(resource_full_path, AlwaysAndForever, char);
+		VDECL(resource_data, AlwaysAndForever, uint8_t);
+	};
+		
+	struct resources_schema
+	{
+		resources_schema(ALLOCATOR_DECL)
+			:
+			resources(allocator)
+		{}
+
+		std::vector<resource_schema, ALLOCATOR_TYPE> resources;
+	};
+
 	vrschema(ALLOCATOR_DECL)
 		:	
 		system_node(allocator),
@@ -1959,7 +1986,8 @@ struct vrschema
 		overlay_node(allocator),
 		rendermodels_node(allocator),
 		extendeddisplay_node(allocator),
-		trackedcamera_node(allocator)
+		trackedcamera_node(allocator),
+		resources_node(allocator)
 	{}
 
 	system_schema			system_node;		// schema is the type. node is the instace
@@ -1972,6 +2000,7 @@ struct vrschema
 	rendermodels_schema		rendermodels_node;
 	extendeddisplay_schema	extendeddisplay_node;
 	trackedcamera_schema	trackedcamera_node;
+	resources_schema        resources_node;
 };
 
 // instantiate the scheme (false means not-iterator);
@@ -3396,11 +3425,56 @@ struct TrackedCameraWrapper
 	StringPool *string_pool;
 };
 
+struct ResourcesWrapper
+{
+	ResourcesWrapper(IVRResources *resi_in, StringPool *string_pool_in)
+		: resi(resi_in), string_pool(string_pool_in)
+	{}
+
+	void GetFullPath(const char *filename, const char *directory, vector_result<char> *result)
+	{
+		query_vector_rccount(result, resi, &IVRResources::GetResourceFullPath, filename, directory);
+	}
+
+	uint32_t GetImageData(const char *joinedfilename, uint8_t **ret)
+	{
+		uint32_t image_size = resi->LoadSharedResource(joinedfilename, nullptr, 0);
+		if (image_size > 0)
+		{
+			char *buf = (char *)malloc(image_size);
+			if (buf)
+			{
+				image_size = resi->LoadSharedResource(joinedfilename, buf, image_size);
+			}
+			*ret = (uint8_t *)buf;
+		}
+		else
+		{
+			*ret = nullptr;
+		}
+		return image_size;
+	}
+
+	void FreeImageData(uint8_t *data)
+	{
+		if (data)
+		{
+			free(data);
+		}
+	}
+	
+	IVRResources *resi;
+	StringPool *string_pool;
+};
+
 
 struct TrackerConfigInternal
 {
 	TrackerConfigInternal(const TrackerConfig &c, ALLOCATOR_DECL)
-		: m_overlay_keys(allocator)
+		:	m_overlay_keys(allocator),
+			m_resource_directories(allocator),
+			m_resource_filenames(allocator)
+			
 	{
 		nearz = c.nearz;
 		farz = c.farz;
@@ -3420,6 +3494,18 @@ struct TrackerConfigInternal
 		{
 			m_overlay_keys[i].assign(c.overlay_keys_to_sample[i]);
 		}
+
+		for (int i = 0; i < c.num_resources_to_sample; i++)
+		{
+			m_resource_directories.emplace_back(allocator);
+			m_resource_filenames.emplace_back(allocator);
+		}
+
+		for (int i = 0; i < c.num_resources_to_sample; i++)
+		{
+			m_resource_directories[i].assign(c.resource_directories_to_sample[i]);
+			m_resource_filenames[i].assign(c.resource_filenames_to_sample[i]);
+		}
 	}
 
 	float nearz;
@@ -3437,6 +3523,8 @@ struct TrackerConfigInternal
 	uint32_t frame_timings_num_frames;
 
 	std::vector<std::basic_string<char, std::char_traits<char>, ALLOCATOR_TYPE>, ALLOCATOR_TYPE> m_overlay_keys;
+	std::vector<std::basic_string<char, std::char_traits<char>, ALLOCATOR_TYPE>, ALLOCATOR_TYPE> m_resource_directories;
+	std::vector<std::basic_string<char, std::char_traits<char>, ALLOCATOR_TYPE>, ALLOCATOR_TYPE> m_resource_filenames;
 };
 
 
@@ -4691,8 +4779,6 @@ static void visit_cameraframetype_schema(visitor_fn &visitor,
 	
 	LEAF_SCALAR(frame_size, tcw.GetCameraFrameSize(device_index, frame_type, &f));
 	LEAF_SCALAR(intrinsics, tcw.GetCameraIntrinsics(device_index, frame_type, &intrinsics));
-
-	// TODO: get rid of these hardcoded constants
 	LEAF_SCALAR(projection, tcw.GetCameraProjection(device_index, frame_type, config.nearz, config.farz, &projection));
 	LEAF_SCALAR(video_texture_size, tcw.GetVideoStreamTextureSize(device_index, frame_type, &video_texture_size));
 
@@ -4746,7 +4832,64 @@ static void visit_trackedcamera_state(visitor_fn &visitor,
 	visitor.end_group_node("camera", -1);
 }
 
+template <typename visitor_fn>
+static void visit_per_resource(visitor_fn &visitor,
+	vrstate::resources_schema *ss, ResourcesWrapper &wrap,
+	int i, const TrackerConfigInternal &tracker_config,
+	ALLOCATOR_DECL)
+{
+	if (visitor.visit_openvr())
+	{
+		visitor.visit_node(ss->resources[i].resource_name.item, tracker_config.m_resource_filenames[i].c_str(), 
+						tracker_config.m_resource_filenames[i].size()+1);
 
+		visitor.visit_node(ss->resources[i].resource_directory.item, tracker_config.m_resource_directories[i].c_str(),
+			tracker_config.m_resource_directories[i].size() + 1);
+
+		vector_result<char> full_path(wrap.string_pool);
+		wrap.GetFullPath(
+			tracker_config.m_resource_filenames[i].c_str(),
+			tracker_config.m_resource_directories[i].c_str(),
+			&full_path);
+
+		visitor.visit_node(ss->resources[i].resource_full_path.item, full_path.s.buf(), full_path.count);
+
+		uint8_t *data;
+		uint32_t size = wrap.GetImageData(full_path.s.buf(), &data);
+		visitor.visit_node(ss->resources[i].resource_data.item, data, size);
+		wrap.FreeImageData(data);
+	}
+	else
+	{
+		visitor.visit_node(ss->resources[i].resource_full_path.item);
+		visitor.visit_node(ss->resources[i].resource_data.item);
+	}
+}
+
+template <typename visitor_fn>
+static void visit_resources_state(visitor_fn &visitor,
+	vrstate::resources_schema *ss, ResourcesWrapper &wrap,
+	const TrackerConfigInternal &tracker_config,
+	ALLOCATOR_DECL)
+{
+	visitor.start_group_node("resources", -1);
+
+	if ((int)ss->resources.size() < tracker_config.m_resource_filenames.size())
+	{
+		ss->resources.reserve(tracker_config.m_resource_filenames.size());
+		while ((int)ss->resources.size() < tracker_config.m_resource_filenames.size())
+		{
+			ss->resources.emplace_back(allocator);
+		}
+	}
+
+	START_VECTOR(resources);
+	for (int i = 0; i < (int)ss->resources.size(); i++)
+	{
+		visit_per_resource(visitor, ss, wrap, i, tracker_config, allocator);
+	}
+	END_VECTOR(resources);
+}
 
 static void encode_events(EncodeStream *stream, const std::forward_list<FrameNumberedEvent, ALLOCATOR_TYPE> &events)
 {
@@ -4850,6 +4993,7 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 	RenderModelWrapper		rendermodel_wrapper(	interfaces.remi,	&outer_state->m_string_pool);
 	ExtendedDisplayWrapper	extended_display_wrapper(interfaces.exdi,	&outer_state->m_string_pool);
 	TrackedCameraWrapper	tracked_camera_wrapper(	interfaces.taci,	&outer_state->m_string_pool);
+	ResourcesWrapper		resources_wrapper(		interfaces.resi,	&outer_state->m_string_pool);
 
 	vrstate *s = &outer_state->m_state;
 	ALLOCATOR_TYPE &allocator = outer_state->m_allocator;
@@ -4910,6 +5054,13 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 		visit_trackedcamera_state(visitor, &s->trackedcamera_node, tracked_camera_wrapper, 
 										outer_state->config, allocator);
 	}
+
+	{
+		twrap t("resources_node");
+		visit_resources_state(visitor, &s->resources_node, resources_wrapper, outer_state->config, allocator);
+	}
+
+
 
 #ifdef TIMERS_ENABLED
 	static bool once;
@@ -7472,6 +7623,8 @@ update_iter(local_name ## iter,\
 auto & local_name = local_name ## iter ## .item;
 
 
+// TODO: look for other getindexes and see if there is a collapsible pattern
+// TODO: also the syncing of vectors (SynchronizeChildVectors()) between state and cursor is also a common pattern
 bool VRRenderModelsCursor::GetIndexForRenderModelName(const char *pchRenderModelName, int *index)
 {
 	bool rc = false;
@@ -8201,15 +8354,156 @@ public:
 
 class VRResourcesCursor : public VRResourcesCppStub
 {
+	CursorContext *m_context;
+	vrstate::resources_schema &state_ref;
+	vriterator::resources_schema &iter_ref;
+
 public:
 	VRResourcesCursor(CursorContext *context)
+		:
+		m_context(context),
+		state_ref(m_context->state->resources_node),
+		iter_ref(m_context->iterators->resources_node)
 	{}
+
+	void SynchronizeChildVectors()
+	{
+		while (iter_ref.resources.size() < state_ref.resources.size())
+		{
+			iter_ref.resources.emplace_back(m_context->m_allocator);
+		}
+	}
+
+	bool GetIndexForResourceName(const char *pchResourceName, int *index);
+	bool GetIndexForResourceNameAndDirectory(const char *pchResourceName, const char *pchDirectoryName, int *index);
+	bool GetIndexWithFallback(const char * pchResourceName, int *index);
+
+	uint32_t LoadSharedResource(const char * pchResourceName, char * pchBuffer, uint32_t unBufferLen) override;
+	uint32_t GetResourceFullPath(const char * pchResourceName, const char * pchResourceTypeDirectory, char * pchPathBuffer, uint32_t unBufferLen) override;
 };
+
+#define SYNC_RESOURCE_STATE(local_name, variable_name) \
+SynchronizeChildVectors();\
+auto local_name ## iter = iter_ref.variable_name;\
+update_iter(local_name ## iter,\
+	state_ref.variable_name,\
+	m_context->current_frame);\
+auto & local_name = local_name ## iter ## .item;
+
+bool VRResourcesCursor::GetIndexForResourceName(const char *pchResourceName, int *index)
+{
+	bool rc = false;
+	SynchronizeChildVectors();
+	for (int i = 0; i < (int)iter_ref.resources.size(); i++)
+	{
+		SYNC_RESOURCE_STATE(name, resources[i].resource_name);
+
+		if (name->is_present() && util_char_vector_cmp(pchResourceName, name->val) == 0)
+		{
+			*index = i;
+			rc = true;
+			break;
+		}
+	}
+	return rc;
+}
+
+bool VRResourcesCursor::GetIndexForResourceNameAndDirectory(
+		const char *pchResourceName, 
+		const char *pchDirectoryName, int *index)
+{
+	bool rc = false;
+	SynchronizeChildVectors();
+	for (int i = 0; i < (int)iter_ref.resources.size(); i++)
+	{
+		SYNC_RESOURCE_STATE(name, resources[i].resource_name);
+		SYNC_RESOURCE_STATE(directory, resources[i].resource_directory);
+
+		if ( (name->is_present() && util_char_vector_cmp(pchResourceName, name->val) == 0) &&
+			 (directory->is_present() && util_char_vector_cmp(pchDirectoryName, directory->val) == 0))
+		{
+			*index = i;
+			rc = true;
+			break;
+		}
+	}
+	return rc;
+}
+
+bool VRResourcesCursor::GetIndexWithFallback(const char * pchResourceName, int *index_ret)
+{
+	bool rc = false;
+	int index;
+
+	if (GetIndexForResourceName(pchResourceName, &index))
+	{
+		rc = true;
+		*index_ret = index;
+	}
+	else
+	{
+		// resource name might have a directory embedded in it: e.g. "icons/banana.txt"
+		const char *slash = nullptr;
+		slash = strchr(pchResourceName, '/');
+		if (!slash)
+		{
+			slash = strchr(pchResourceName, '\\');
+		}
+		if (slash)
+		{
+			std::string dir(pchResourceName, slash - pchResourceName);
+			if (GetIndexForResourceNameAndDirectory(slash+1, dir.c_str(), &index))
+			{
+				rc = true;
+				*index_ret = index;
+			}
+		}
+	}
+	return rc;
+}
+
+
+uint32_t VRResourcesCursor::LoadSharedResource(const char * pchResourceName, char * pchBuffer, uint32_t unBufferLen)
+{
+	LOG_ENTRY("CursorLoadSharedResource");
+
+	int resource_index;
+	uint32_t rc = 0; 
+	if (GetIndexWithFallback(pchResourceName, &resource_index))
+	{
+		SYNC_RESOURCE_STATE(data, resources[resource_index].resource_data);
+		if (data->is_present())
+		{
+			util_vector_to_return_buf_rc(&data->val, (uint8_t*)pchBuffer, unBufferLen, &rc);
+		}
+	}
+
+	LOG_EXIT_RC(rc, "CursorLoadSharedResource");
+}
+
+uint32_t VRResourcesCursor::GetResourceFullPath(const char * pchResourceName, const char * pchResourceTypeDirectory, 
+	char * pchPathBuffer, uint32_t unBufferLen)
+{
+	LOG_ENTRY("CursorGetResourceFullPath");
+	
+	int resource_index;
+	uint32_t rc = 0;
+	if (GetIndexForResourceNameAndDirectory(pchResourceName, pchResourceTypeDirectory, &resource_index))
+	{
+		SYNC_RESOURCE_STATE(data, resources[resource_index].resource_full_path);
+		if (data->is_present())
+		{
+			util_vector_to_return_buf_rc(&data->val, pchPathBuffer, unBufferLen, &rc);
+		}
+	}
+	
+	LOG_EXIT_RC(rc, "CursorGetResourceFullPath");
+}
 
 //
 // VRcursor has:
 //		a pointer to the state tracker
-//      a set of itertors into that state tracker.
+//      a set of iterators into that state tracker.
 //
 //
 // There can be more than one cursor pointing into the same state tracker

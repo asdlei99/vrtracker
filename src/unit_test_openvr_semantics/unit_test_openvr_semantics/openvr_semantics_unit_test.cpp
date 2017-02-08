@@ -30,7 +30,8 @@ void compare_remi_strange_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfa
 void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
 void compare_exdi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
 void compare_taci_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-
+void compare_screeni_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
+void compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
 void interactive_component_state_test(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
 
 
@@ -131,12 +132,27 @@ const char *overlay_keys[] = {
 	 "a","b","c"
 };
 
+const char *resource_directories[] =
+{
+	"icons"
+};
+
+const char *resource_names[] = 
+{
+	"base_status_error.png"
+};
+
 int main()
 {
 	TrackerConfig c;
 	c.set_default();
-	c.num_overlays_to_sample = 3;
+	c.num_overlays_to_sample = sizeof(overlay_keys)/sizeof(overlay_keys[0]);
 	c.overlay_keys_to_sample = overlay_keys;
+
+	c.num_resources_to_sample = sizeof(resource_names) / sizeof(resource_names[0]);
+	c.resource_directories_to_sample = resource_directories;
+	c.resource_filenames_to_sample = resource_names;
+
 
 	RawInterface raw;
 	raw.Init();
@@ -154,8 +170,11 @@ int main()
 	compare_compi_interfaces(&raw, &cursor, c);
 	compare_ovi_interfaces(&raw, &cursor, c);
 	compare_exdi_interfaces(&raw, &cursor, c);
-#endif
 	compare_taci_interfaces(&raw, &cursor, c);
+#endif
+	compare_screeni_interfaces(&raw, &cursor, c);
+	compare_resi_interfaces(&raw, &cursor, c);
+	
 
 
 	bool do_interactive = false;
@@ -215,6 +234,12 @@ void uninit(char(&s)[count])
 	s[1] = '\0';
 }
 
+void uninit(char *s, uint32_t asize)
+{
+	s[0] = 3;
+	s[1] = '\0';
+}
+
 vr::HmdVector2_t uninit_vec2()
 {
 	vr::HmdVector2_t a;
@@ -223,6 +248,125 @@ vr::HmdVector2_t uninit_vec2()
 	return a;
 }
 
+void compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
+{
+	openvr_broker::open_vr_interfaces *a = &ia->Get();
+	openvr_broker::open_vr_interfaces *b = &ib->Get();
+
+	// 1.26 kb
+	// "base_status_error.png"
+	//const char *resource_name = "icons/base_status_error.png";
+	//char buf[2048];
+	//uint32_t u = cpp->resi->LoadSharedResource(resource_name, buf, sizeof(buf));
+	//printf("LoadSharedResoure result %d\n", u);
+
+	for (int i = 0; i < c.num_resources_to_sample; i++)
+	{
+		char apathbuffer[256];
+		uninit(apathbuffer);
+		{
+			uint32_t aret = a->resi->GetResourceFullPath(
+						c.resource_filenames_to_sample[i], 
+						c.resource_directories_to_sample[i],
+						apathbuffer, sizeof(apathbuffer));
+			dprintf("GetResourceFullPath result %d\n", aret);
+
+
+			char bpathbuffer[256];
+			uninit(bpathbuffer);
+
+			uint32_t bret = b->resi->GetResourceFullPath(
+				c.resource_filenames_to_sample[i],
+				c.resource_directories_to_sample[i],
+				bpathbuffer, sizeof(bpathbuffer));
+			assert(aret == bret);
+			assert(strcmp(apathbuffer, bpathbuffer) == 0);
+		}
+
+		{
+			char joinedname[2048];
+			sprintf(joinedname, "%s/%s", c.resource_directories_to_sample[i], c.resource_filenames_to_sample[i]);  //stupid?
+			uint32_t asize = a->resi->LoadSharedResource(joinedname, nullptr, 0);
+
+			uint32_t bsize = b->resi->LoadSharedResource(joinedname, nullptr, 0);
+			assert(asize == bsize);
+
+			char *abuf = (char *)malloc(asize);
+			uninit(abuf, asize);
+			uint32_t aret = a->resi->LoadSharedResource(joinedname, abuf, asize);
+			dprintf("LoadSharedResource result %d\n", aret);
+
+			char *bbuf = (char *)malloc(bsize);
+			uninit(bbuf, bsize);
+			uint32_t bret = b->resi->LoadSharedResource(joinedname, bbuf, bsize);
+			dprintf("LoadSharedResource result %d\n", aret);
+			assert(aret == bret);
+			assert(memcmp(abuf, bbuf, asize) == 0);
+
+			free(abuf);
+			free(bbuf);
+
+			char *abuf2 = (char *)malloc(asize);
+			uninit(abuf2, asize);
+			uint32_t aret2 = a->resi->LoadSharedResource(apathbuffer, abuf2, asize);
+			dprintf("LoadSharedResource result %d\n", aret2);
+			free(abuf2);
+
+			char *bbuf2 = (char *)malloc(asize);
+			uninit(bbuf2, asize);
+			uint32_t bret2 = b->resi->LoadSharedResource(apathbuffer, bbuf2, asize);
+			dprintf("LoadSharedResource result %d\n", bret2);
+			assert(aret2 == bret2);
+			assert(memcmp(abuf2, bbuf2, asize) == 0);
+
+			free(abuf2);
+			free(bbuf2);
+		}
+	}
+
+	dprintf("bla");
+
+}
+
+
+void compare_screeni_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
+{
+	openvr_broker::open_vr_interfaces *a = &ia->Get();
+	openvr_broker::open_vr_interfaces *b = &ib->Get();
+	ia->Refresh();
+	ib->Refresh();
+
+	vr::ScreenshotHandle_t handlea;
+	vr::EVRScreenshotError rca = a->screeni->RequestScreenshot(
+		&handlea,
+		vr::VRScreenshotType_Stereo, "C:\vr_streams\\preview_screenshot", "C:\vr_streams\\final_screenshot");
+
+	{
+		vr::EVRScreenshotError errora;
+		vr::EVRScreenshotType typea = a->screeni->GetScreenshotPropertyType(handlea, &errora);
+		dprintf("bla");
+	}
+	{
+		char preview_filename[256];
+		vr::EVRScreenshotError errora;
+		uint32_t rca = a->screeni->GetScreenshotPropertyFilename(
+			handlea, vr::VRScreenshotPropertyFilenames_Preview,
+			preview_filename, sizeof(preview_filename), &errora);
+		dprintf("bla");
+	}
+
+	{
+		char vr_filename[256];
+		vr::EVRScreenshotError errora;
+		uint32_t rca = a->screeni->GetScreenshotPropertyFilename(
+			handlea, vr::VRScreenshotPropertyFilenames_VR,
+			vr_filename, sizeof(vr_filename), &errora);
+		dprintf("bla");
+
+	}
+	
+
+}
 
 
 void compare_exdi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)

@@ -54,7 +54,13 @@
 //		* adding a dumber encoder might be the easiest way to make this smaller and faster - ie no formatting/spaces just csv and no enum 2 string
 
 
-struct TrackerConfig
+// need to pipe in callers areas of interest:
+// caller assets: resources, screenshot handles, overlays, 
+// caller specific queries: nearz, farz, seconds to photon queries, etc:
+// unless he tells me, then I need to "spy" it out
+//
+// its meant to be more of a hint than part of the database - ie don't add dependencies to this
+struct TrackerConfig	// aka Hints
 {
 	float nearz;
 	float farz;
@@ -73,6 +79,11 @@ struct TrackerConfig
 	int num_overlays_to_sample;
 	const char **overlay_keys_to_sample;
 
+	int num_resources_to_sample;
+	const char **resource_directories_to_sample;
+	const char **resource_filenames_to_sample;
+
+
 	void set_default()
 	{
 		nearz = 0.02f;
@@ -87,6 +98,10 @@ struct TrackerConfig
 
 		num_overlays_to_sample = 0;
 		overlay_keys_to_sample = nullptr;
+
+		num_resources_to_sample = 0;
+		resource_directories_to_sample = nullptr;
+		resource_filenames_to_sample = nullptr;
 	}
 };
 
