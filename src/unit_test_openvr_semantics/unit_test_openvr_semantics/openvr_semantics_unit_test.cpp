@@ -26,9 +26,11 @@ void compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 void compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
 void compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
 void compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-void compare_strange_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
+void compare_remi_strange_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
 void compare_trackedcamera_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
 void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
+void compare_exdi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
+
 
 void interactive_component_state_test(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
 
@@ -134,13 +136,13 @@ int main()
 	c.set_default();
 	c.num_overlays_to_sample = 3;
 	c.overlay_keys_to_sample = overlay_keys;
-	
 
 	RawInterface raw;
 	raw.Init();
 	CursorBasedInterface cursor;
 	cursor.Init(c, raw.Get());
 
+#if 0
 	compare_sysi_interfaces(&raw, &cursor, c);
 	compare_appi_interfaces(&raw, &cursor, c);
 	compare_seti_interfaces(&raw, &cursor, c);
@@ -150,6 +152,8 @@ int main()
 	compare_strange_interfaces(&raw, &cursor);
 	compare_compi_interfaces(&raw, &cursor, c);
 	compare_ovi_interfaces(&raw, &cursor, c);
+#endif
+	compare_exdi_interfaces(&raw, &cursor, c);
 
 
 	bool do_interactive = false;
@@ -160,6 +164,59 @@ int main()
 
     return 0;
 }
+
+
+void compare_exdi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
+{
+
+	openvr_broker::open_vr_interfaces *a = &ia->Get();
+	openvr_broker::open_vr_interfaces *b = &ib->Get();
+	ia->Refresh();
+	ib->Refresh();
+
+	{
+		//virtual void GetWindowBounds(int32_t *pnX, int32_t *pnY, uint32_t *pnWidth, uint32_t *pnHeight) = 0;
+		int ax, ay;
+		uint32_t aw, ah;
+		a->exdi->GetWindowBounds(&ax, &ay, &aw, &ah);
+
+		int bx, by;
+		uint32_t bw, bh;
+		b->exdi->GetWindowBounds(&bx, &by, &bw, &bh);
+		assert(ax == bx);
+		assert(ay == by);
+		assert(aw == bw);
+		assert(ah == bh);
+
+	}
+	
+	{
+		uint32_t ax, ay;
+		uint32_t aw, ah;
+		a->exdi->GetEyeOutputViewport(vr::Eye_Left, &ax, &ay, &aw, &ah);
+		uint32_t bx, by;
+		uint32_t bw, bh;
+		b->exdi->GetEyeOutputViewport(vr::Eye_Left, &bx, &by, &bw, &bh);
+		assert(ax == bx);
+		assert(ay == by);
+		assert(ah == bh);
+		assert(aw == bw);
+	}
+
+	{
+		uint32_t ax, ay;
+		uint32_t aw, ah;
+		a->exdi->GetEyeOutputViewport(vr::Eye_Right, &ax, &ay, &aw, &ah);
+		uint32_t bx, by;
+		uint32_t bw, bh;
+		b->exdi->GetEyeOutputViewport(vr::Eye_Right, &bx, &by, &bw, &bh);
+		assert(ax == bx);
+		assert(ay == by);
+		assert(ah == bh);
+		assert(aw == bw);
+	}
+}
+
 
 void process_overlay_events_on_handles(
 	OpenVRInterfaceUnderTest *ia, std::vector<vr::VROverlayHandle_t> *h,
@@ -1636,7 +1693,7 @@ void compare_trackedcamera_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterf
 }
 
 
-void compare_strange_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib)
+void compare_remi_strange_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib)
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
