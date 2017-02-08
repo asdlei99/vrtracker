@@ -1781,6 +1781,7 @@ struct vrschema
 			INIT(overlay_input_method),
 			INIT(overlay_mouse_scale),
 			INIT(overlay_is_hover_target),
+			INIT(overlay_is_visible),
 			INIT(overlay_texture_size),
 			INIT(events)
 		{}
@@ -1812,6 +1813,7 @@ struct vrschema
 		SDECL(overlay_input_method, EVROverlayError, VROverlayInputMethod);
 		SDECL(overlay_mouse_scale, EVROverlayError, HmdVector2_t);
 		SDECL(overlay_is_hover_target, AlwaysAndForever, bool);
+		SDECL(overlay_is_visible, AlwaysAndForever, bool);
 		SDECL(overlay_texture_size, EVROverlayError, Uint32Size);
 
 		SDECL(events, AlwaysAndForever, VREvent_t);	// experiment
@@ -6908,6 +6910,32 @@ public:
 	uint32_t GetOverlayName(vr::VROverlayHandle_t ulOverlayHandle, char * pchValue, uint32_t unBufferSize, vr::EVROverlayError * pError) override;
 	vr::EVROverlayError GetOverlayImageData(vr::VROverlayHandle_t ulOverlayHandle, void * pvBuffer, uint32_t unBufferSize, uint32_t * punWidth, uint32_t * punHeight) override;
 
+	uint32_t GetOverlayRenderingPid(VROverlayHandle_t ulOverlayHandle) override;
+	bool IsOverlayVisible(VROverlayHandle_t ulOverlayHandle) override;
+	bool IsHoverTargetOverlay(VROverlayHandle_t ulOverlayHandle) override;
+	EVROverlayError GetOverlayFlag(VROverlayHandle_t ulOverlayHandle, VROverlayFlags eOverlayFlag, bool *pbEnabled) override;
+
+	vr::EVROverlayError GetOverlayColor(vr::VROverlayHandle_t ulOverlayHandle, float * pfRed, float * pfGreen, float * pfBlue) override;
+	vr::EVROverlayError GetOverlayAlpha(vr::VROverlayHandle_t ulOverlayHandle, float * pfAlpha) override;
+	vr::EVROverlayError GetOverlayTexelAspect(vr::VROverlayHandle_t ulOverlayHandle, float * pfTexelAspect) override;
+	vr::EVROverlayError GetOverlaySortOrder(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * punSortOrder) override;
+	vr::EVROverlayError GetOverlayWidthInMeters(vr::VROverlayHandle_t ulOverlayHandle, float * pfWidthInMeters) override;
+	vr::EVROverlayError GetOverlayAutoCurveDistanceRangeInMeters(vr::VROverlayHandle_t ulOverlayHandle, float * pfMinDistanceInMeters, float * pfMaxDistanceInMeters) override;
+	vr::EVROverlayError GetOverlayTextureColorSpace(vr::VROverlayHandle_t ulOverlayHandle, vr::EColorSpace * peTextureColorSpace) override;
+	vr::EVROverlayError GetOverlayTextureBounds(vr::VROverlayHandle_t ulOverlayHandle, struct vr::VRTextureBounds_t * pOverlayTextureBounds) override;
+	vr::EVROverlayError GetOverlayTransformType(vr::VROverlayHandle_t ulOverlayHandle, vr::VROverlayTransformType * peTransformType) override;
+	vr::EVROverlayError GetOverlayTransformAbsolute(vr::VROverlayHandle_t ulOverlayHandle, vr::ETrackingUniverseOrigin * peTrackingOrigin, struct vr::HmdMatrix34_t * pmatTrackingOriginToOverlayTransform) override;
+	vr::EVROverlayError GetOverlayTransformTrackedDeviceRelative(vr::VROverlayHandle_t ulOverlayHandle, vr::TrackedDeviceIndex_t * punTrackedDevice, struct vr::HmdMatrix34_t * pmatTrackedDeviceToOverlayTransform) override;
+	vr::EVROverlayError GetOverlayTransformTrackedDeviceComponent(vr::VROverlayHandle_t ulOverlayHandle, vr::TrackedDeviceIndex_t * punDeviceIndex, char * pchComponentName, uint32_t unComponentNameSize) override;
+	vr::EVROverlayError GetOverlayInputMethod(vr::VROverlayHandle_t ulOverlayHandle, vr::VROverlayInputMethod * peInputMethod) override;
+	vr::EVROverlayError GetOverlayMouseScale(vr::VROverlayHandle_t ulOverlayHandle, struct vr::HmdVector2_t * pvecMouseScale) override;
+	vr::VROverlayHandle_t GetGamepadFocusOverlay() override;
+	vr::EVROverlayError GetOverlayTextureSize(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * pWidth, uint32_t * pHeight) override;
+	
+	bool IsActiveDashboardOverlay(vr::VROverlayHandle_t ulOverlayHandle) override;
+	vr::EVROverlayError GetDashboardOverlaySceneProcess(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * punProcessId) override;
+	uint32_t GetKeyboardText(char * pchText, uint32_t cchText) override;
+	vr::EVROverlayError GetOverlayFlags(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * pFlags) override;
 };
 
 #define SYNC_OVERLAY_STATE(local_name, variable_name) \
@@ -7031,6 +7059,74 @@ uint32_t VROverlayCursor::GetOverlayName(vr::VROverlayHandle_t ulOverlayHandle, 
 	LOG_EXIT_RC(rc, "CppStubGetOverlayName");
 }
 
+
+
+uint32_t VROverlayCursor::GetOverlayRenderingPid(VROverlayHandle_t ulOverlayHandle)
+{
+	uint32_t rc = 0;
+	int index;
+	vr::EVROverlayError found_it = GetOverlayIndexForHandle(ulOverlayHandle, &index); 
+	if (found_it == vr::VROverlayError_None)
+	{
+		SYNC_OVERLAY_STATE(key, overlays[index].overlay_rendering_pid);
+		rc = key->val;
+	}
+	return rc;
+}
+
+#define OVERLAY_BOOL_LOOKUP(var_name)\
+bool rc = 0;\
+int index;\
+vr::EVROverlayError found_it = GetOverlayIndexForHandle(ulOverlayHandle, &index);\
+if (found_it == vr::VROverlayError_None)\
+{\
+	SYNC_OVERLAY_STATE(key, overlays[index].var_name);\
+	rc = key->val;\
+}\
+return rc;
+
+bool VROverlayCursor::IsOverlayVisible(VROverlayHandle_t ulOverlayHandle)
+{
+	OVERLAY_BOOL_LOOKUP(overlay_is_visible);
+}
+
+bool VROverlayCursor::IsHoverTargetOverlay(VROverlayHandle_t ulOverlayHandle)
+{
+	OVERLAY_BOOL_LOOKUP(overlay_is_hover_target);
+}
+
+EVROverlayError 
+VROverlayCursor::GetOverlayFlag(VROverlayHandle_t ulOverlayHandle, VROverlayFlags eOverlayFlag, bool *pbEnabled)
+{
+	EVROverlayError err = vr::VROverlayError_UnknownOverlay;
+	bool rc = 0; 
+	int index; 
+	vr::EVROverlayError found_it = GetOverlayIndexForHandle(ulOverlayHandle, &index); 
+	if (found_it == vr::VROverlayError_None)
+	{
+		SYNC_OVERLAY_STATE(key, overlays[index].overlay_flags); 
+		err = key->presence;
+		if (key->is_present())
+		{
+			int bit_pos = (int)eOverlayFlag;
+			uint32_t mask = 0x1 << (bit_pos);	// weird in the lowest bit isn't used
+			uint32_t flags = key->val;
+			if ((mask & flags) != 0)
+			{
+				if (pbEnabled)
+					*pbEnabled = true;
+			}
+			else
+			{
+				if (pbEnabled)
+					*pbEnabled = false;
+			}
+		}
+	}
+	return err;
+}
+
+
 vr::EVROverlayError VROverlayCursor::GetOverlayImageData(
 	vr::VROverlayHandle_t ulOverlayHandle, void * pvBuffer, uint32_t unBufferSize, uint32_t * punWidth, uint32_t * punHeight)
 {
@@ -7069,6 +7165,216 @@ vr::EVROverlayError VROverlayCursor::GetOverlayImageData(
 	}
 
 	LOG_EXIT_RC(rc, "CppStubGetOverlayImageData");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayColor(vr::VROverlayHandle_t ulOverlayHandle, float * pfRed, float * pfGreen, float * pfBlue)
+{
+	LOG_ENTRY("CppStubGetOverlayColor");
+	int index;
+	vr::EVROverlayError rc = GetOverlayIndexForHandle(ulOverlayHandle, &index);
+	if (rc == vr::VROverlayError_None)
+	{
+		SYNC_OVERLAY_STATE(color, overlays[index].overlay_color);
+		if (color->is_present())
+		{
+			if (pfRed)
+			{
+				*pfRed = color->val.r;		// 2/7/2017: openvr writes to pfRed only if valid
+			}
+			if (pfGreen)
+			{
+				*pfGreen = color->val.g;
+			}
+			if (pfBlue)
+			{
+				*pfGreen = color->val.b;
+			}
+		}
+	}
+	LOG_EXIT_RC(rc, "CppStubGetOverlayColor");
+}
+
+#define OVERLAY_VAL_LOOKUP(schema_name, param_name) \
+int index;\
+vr::EVROverlayError rc = GetOverlayIndexForHandle(ulOverlayHandle, &index);\
+if (rc == vr::VROverlayError_None)\
+{\
+	SYNC_OVERLAY_STATE(state_val, overlays[index].schema_name);\
+	if (state_val->is_present()) \
+	{\
+		*param_name = state_val->val;\
+	}\
+	rc = state_val->presence;\
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayAlpha(vr::VROverlayHandle_t ulOverlayHandle, float * pfAlpha)
+{
+	LOG_ENTRY("CppStubGetOverlayAlpha");
+
+	OVERLAY_VAL_LOOKUP(overlay_alpha, pfAlpha);
+	
+	LOG_EXIT_RC(rc, "CppStubGetOverlayAlpha");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayTexelAspect(vr::VROverlayHandle_t ulOverlayHandle, float * pfTexelAspect)
+{
+	LOG_ENTRY("CppStubGetOverlayTexelAspect");
+	OVERLAY_VAL_LOOKUP(overlay_texel_aspect, pfTexelAspect);
+	LOG_EXIT_RC(rc, "CppStubGetOverlayTexelAspect");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlaySortOrder(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * punSortOrder)
+{
+	LOG_ENTRY("CppStubGetOverlaySortOrder");
+	OVERLAY_VAL_LOOKUP(overlay_sort_order, punSortOrder);
+	LOG_EXIT_RC(rc, "CppStubGetOverlaySortOrder");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayWidthInMeters(vr::VROverlayHandle_t ulOverlayHandle, float * pfWidthInMeters)
+{
+	LOG_ENTRY("CppStubGetOverlayWidthInMeters");
+	OVERLAY_VAL_LOOKUP(overlay_width_in_meters, pfWidthInMeters);
+	LOG_EXIT_RC(rc, "CppStubGetOverlayWidthInMeters");
+}
+
+// take a struct and split it into two outgoing params
+#define OVERLAY_2_STRUCT_VAL_LOOKUP(schema_name, schema_field1, schema_field2, param_name1, param_name2) \
+int index;\
+vr::EVROverlayError rc = GetOverlayIndexForHandle(ulOverlayHandle, &index);\
+if (rc == vr::VROverlayError_None)\
+{\
+	SYNC_OVERLAY_STATE(state_val, overlays[index].schema_name);\
+	if (state_val->is_present())\
+	{\
+		if (param_name1)\
+		{\
+			*param_name1 = state_val->val.schema_field1;\
+		}\
+		if (param_name2)\
+		{\
+			*param_name2 = state_val->val.schema_field2;\
+		}\
+	}\
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayAutoCurveDistanceRangeInMeters(vr::VROverlayHandle_t ulOverlayHandle, 
+	float * pfMinDistanceInMeters, float * pfMaxDistanceInMeters)
+{
+	LOG_ENTRY("CppStubGetOverlayAutoCurveDistanceRangeInMeters");
+	OVERLAY_2_STRUCT_VAL_LOOKUP(overlay_auto_curve_range_in_meters, min, max, pfMinDistanceInMeters, pfMaxDistanceInMeters);
+	LOG_EXIT_RC(rc, "CppStubGetOverlayAutoCurveDistanceRangeInMeters");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayTextureColorSpace(vr::VROverlayHandle_t ulOverlayHandle, vr::EColorSpace * peTextureColorSpace)
+{
+	LOG_ENTRY("CppStubGetOverlayTextureColorSpace");
+	OVERLAY_VAL_LOOKUP(overlay_texture_color_space, peTextureColorSpace);
+	LOG_EXIT_RC(rc, "CppStubGetOverlayTextureColorSpace");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayTextureBounds(vr::VROverlayHandle_t ulOverlayHandle, 
+	struct vr::VRTextureBounds_t * pOverlayTextureBounds)
+{
+	LOG_ENTRY("CppStubGetOverlayTextureBounds");
+	OVERLAY_VAL_LOOKUP(overlay_texture_bounds, pOverlayTextureBounds);
+	LOG_EXIT_RC(rc, "CppStubGetOverlayTextureBounds");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayTransformType(vr::VROverlayHandle_t ulOverlayHandle, vr::VROverlayTransformType * peTransformType)
+{
+	LOG_ENTRY("CppStubGetOverlayTransformType");
+	OVERLAY_VAL_LOOKUP(overlay_transform_type, peTransformType);
+	LOG_EXIT_RC(rc, "CppStubGetOverlayTransformType");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayTransformAbsolute(
+		vr::VROverlayHandle_t ulOverlayHandle, 
+		vr::ETrackingUniverseOrigin * peTrackingOrigin, 
+		struct vr::HmdMatrix34_t * pmatTrackingOriginToOverlayTransform)
+{
+	LOG_ENTRY("CppStubGetOverlayTransformAbsolute");
+	OVERLAY_2_STRUCT_VAL_LOOKUP(overlay_transform_absolute, tracking_origin, origin2overlaytransform, peTrackingOrigin, pmatTrackingOriginToOverlayTransform);
+	LOG_EXIT_RC(rc, "CppStubGetOverlayTransformAbsolute");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayTransformTrackedDeviceRelative(
+		vr::VROverlayHandle_t ulOverlayHandle, 
+		vr::TrackedDeviceIndex_t * punTrackedDevice, 
+		struct vr::HmdMatrix34_t * pmatTrackedDeviceToOverlayTransform)
+{
+	LOG_ENTRY("CppStubGetOverlayTransformTrackedDeviceRelative");
+	OVERLAY_2_STRUCT_VAL_LOOKUP(overlay_transform_device_relative, 
+								tracked_device, device2overlaytransform, 
+								punTrackedDevice, pmatTrackedDeviceToOverlayTransform);
+	LOG_EXIT_RC(rc, "CppStubGetOverlayTransformTrackedDeviceRelative");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayTransformTrackedDeviceComponent(
+					vr::VROverlayHandle_t ulOverlayHandle, 
+					vr::TrackedDeviceIndex_t * punDeviceIndex, 
+					char * pchComponentName, uint32_t unComponentNameSize)
+{
+	LOG_ENTRY("CppStubGetOverlayTransformTrackedDeviceComponent");
+	
+	LOG_EXIT_RC(rc, "CppStubGetOverlayTransformTrackedDeviceComponent");
+}
+
+
+vr::EVROverlayError VROverlayCursor::GetOverlayInputMethod(vr::VROverlayHandle_t ulOverlayHandle, vr::VROverlayInputMethod * peInputMethod)
+{
+	LOG_ENTRY("CppStubGetOverlayInputMethod");
+	static vr::EVROverlayError rc;
+	LOG_EXIT_RC(rc, "CppStubGetOverlayInputMethod");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayMouseScale(vr::VROverlayHandle_t ulOverlayHandle, struct vr::HmdVector2_t * pvecMouseScale)
+{
+	LOG_ENTRY("CppStubGetOverlayMouseScale");
+	static vr::EVROverlayError rc;
+	LOG_EXIT_RC(rc, "CppStubGetOverlayMouseScale");
+}
+
+
+vr::VROverlayHandle_t VROverlayCursor::GetGamepadFocusOverlay()
+{
+	LOG_ENTRY("CppStubGetGamepadFocusOverlay");
+	static vr::VROverlayHandle_t rc;
+	LOG_EXIT_RC(rc, "CppStubGetGamepadFocusOverlay");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayTextureSize(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * pWidth, uint32_t * pHeight)
+{
+	LOG_ENTRY("CppStubGetOverlayTextureSize");
+	static vr::EVROverlayError rc;
+	LOG_EXIT_RC(rc, "CppStubGetOverlayTextureSize");
+}
+
+bool VROverlayCursor::IsActiveDashboardOverlay(vr::VROverlayHandle_t ulOverlayHandle)
+{
+	LOG_ENTRY("CppStubIsActiveDashboardOverlay");
+	static bool rc = true;
+	LOG_EXIT_RC(rc, "CppStubIsActiveDashboardOverlay");
+}
+
+vr::EVROverlayError VROverlayCursor::GetDashboardOverlaySceneProcess(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * punProcessId)
+{
+	LOG_ENTRY("CppStubGetDashboardOverlaySceneProcess");
+	static vr::EVROverlayError rc;
+	LOG_EXIT_RC(rc, "CppStubGetDashboardOverlaySceneProcess");
+}
+
+uint32_t VROverlayCursor::GetKeyboardText(char * pchText, uint32_t cchText)
+{
+	LOG_ENTRY("CppStubGetKeyboardText");
+	static uint32_t rc = 0;
+	LOG_EXIT_RC(rc, "CppStubGetKeyboardText");
+}
+
+vr::EVROverlayError VROverlayCursor::GetOverlayFlags(vr::VROverlayHandle_t ulOverlayHandle, uint32_t * pFlags)
+{
+	LOG_ENTRY("CppStubGetOverlayFlags");
+	static vr::EVROverlayError rc;
+	LOG_EXIT_RC(rc, "CppStubGetOverlayFlags");
 }
 
 

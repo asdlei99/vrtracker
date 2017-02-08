@@ -452,6 +452,9 @@ void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTe
 		std::string friendly_name = std::string(c.overlay_keys_to_sample[i]) + "friendly";
 		vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_a);
 
+		float alpha = -77.0f;
+		a->ovi->GetOverlayAlpha(22, &alpha);
+		
 		vr::VROverlayHandle_t overlay_handle_b;
 		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_b);
 		assert(errora == errorb);	
@@ -687,19 +690,15 @@ void compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnder
 	{
 		ia->Refresh();
 		ib->Refresh();
-
 		vr::Compositor_FrameTiming timing_a;
 		timing_a.m_nSize = sizeof(vr::Compositor_FrameTiming);
 		bool rca = a->compi->GetFrameTiming(&timing_a, c.frame_timing_frames_ago);
-
 		vr::Compositor_FrameTiming timing_b;
 		timing_b.m_nSize = sizeof(vr::Compositor_FrameTiming);
 		bool rcb = b->compi->GetFrameTiming(&timing_b, c.frame_timing_frames_ago);
-
 		assert(rca == rcb);
 		assert(softcompare_is_similar(timing_a, timing_b));
 	}
-
 
 	{
 		vr::Compositor_FrameTiming *atimings;
@@ -752,7 +751,6 @@ void compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnder
 		{
 			vr::HmdColor_t color_a = a->compi->GetCurrentFadeColor(false);
 			vr::HmdColor_t color_b = b->compi->GetCurrentFadeColor(false);
-			
 			assert(softcompare_is_similar(color_a, color_b, 0.01f));
 		}
 		{
@@ -765,13 +763,11 @@ void compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnder
 		float alpha_b = b->compi->GetCurrentGridAlpha();
 		assert(softcompare_is_similar(alpha_a, alpha_b, .01f));
 	}
-
 	{
 		bool rca = a->compi->IsFullscreen();
 		bool rcb = b->compi->IsFullscreen();
 		assert(rca == rcb);
 	}
-
 	{
 		uint32_t rca = a->compi->GetCurrentSceneFocusProcess();
 		uint32_t rcb = b->compi->GetCurrentSceneFocusProcess();
@@ -802,8 +798,6 @@ void compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnder
 		assert(rca == rcb);
 	}
 }
-
-
 
 void compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
 {
