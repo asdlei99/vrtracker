@@ -159,23 +159,20 @@ int main()
 	CursorBasedInterface cursor;
 	cursor.Init(c, raw.Get());
 
-#if 0
+
 	compare_sysi_interfaces(&raw, &cursor, c);
 	compare_appi_interfaces(&raw, &cursor, c);
 	compare_seti_interfaces(&raw, &cursor, c);
 	compare_chapi_interfaces(&raw, &cursor, c);
 	compare_chapsi_interfaces(&raw, &cursor);
-	compare_trackedcamera_interfaces(&raw, &cursor);
-	compare_strange_interfaces(&raw, &cursor);
+	compare_taci_interfaces(&raw, &cursor,c);
+	compare_remi_strange_interfaces(&raw, &cursor);
 	compare_compi_interfaces(&raw, &cursor, c);
 	compare_ovi_interfaces(&raw, &cursor, c);
 	compare_exdi_interfaces(&raw, &cursor, c);
 	compare_taci_interfaces(&raw, &cursor, c);
-#endif
 	compare_screeni_interfaces(&raw, &cursor, c);
 	compare_resi_interfaces(&raw, &cursor, c);
-	
-
 
 	bool do_interactive = false;
 	if (do_interactive)
@@ -363,10 +360,7 @@ void compare_screeni_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnd
 		dprintf("bla");
 
 	}
-	
-
 }
-
 
 void compare_exdi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
 {
@@ -1422,6 +1416,57 @@ void compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 	}
 }
 
+static void dump_apps(vr::IVRApplications *appi)
+{
+	uint32_t counta1 = appi->GetApplicationCount();
+
+	for (int i = 0; i < (int)counta1; i++)
+	{
+		char buf[256];
+		vr::EVRApplicationError erra = appi->GetApplicationKeyByIndex(i, buf, sizeof(buf));
+
+		dprintf("%s\n", buf);
+	}
+}
+
+// add some apps,
+// remove some apps
+// add them back in
+
+static void write_manifest(std::string filename, const std::vector<std::string> &app_keys)
+{
+	FILE *pf = fopen(filename.c_str(), "wt");
+	assert(pf);
+
+	fprintf(pf, "{\n");
+	fprintf(pf, "\"applications\": [\n");
+	for (int i = 0; i < (int)app_keys.size(); i++)
+	{
+		fprintf(pf, "{\n");
+
+		fprintf(pf, "  \"app_key\" : \"%s\",\n", app_keys[i].c_str());
+		fprintf(pf, "  \"launch_type\" : \"binary\",\n");
+		fprintf(pf, "  \"binary_path_windows\" : \"x.exe\",\n");
+		fprintf(pf, "  \"binary_path_osx\" : \"x\",\n");
+		fprintf(pf, "  \"binary_path_linux\" : \"x\",\n");
+		fprintf(pf, "  \"arguments\" : \"\",\n");
+		fprintf(pf, "  \"image_path\" : \"\"\n");
+
+
+		if (i < (int)app_keys.size()-1)
+		{
+			fprintf(pf, "},\n");
+		}
+		else
+		{
+			fprintf(pf, "}\n");
+		}	
+	}
+	fprintf(pf, "]}\n");
+	fclose(pf);
+}
+
+
 // broadly tests all get interfaces to make sure they behave
 // the same 
 void compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
@@ -1435,8 +1480,42 @@ void compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 		assert(ba == bb);
 	}
 
+	
 	ia->Refresh();
 	ib->Refresh();
+
+	
+	// try adding a temporary app manifest
+	// to add apps, use a unique filename and list a bunch of things in it
+	// to remove apps, use the same filename and remove the apps from it
+	
+	
+	{
+		// notes on app manifests
+		// https://steamcommunity.com/app/358720/discussions/0/357284767245532150/?l=norwegian
+
+		//const char *manifest_path = "D:\\Games\\Steam\\steamapps\\common\\SteamVR\\tools\\seantools.vrmanifest";
+
+		const char *manifest_path = "C:\\vr_streams\\unittest.vrmanifest";
+		std::vector<std::string> twokeys = { "appkey1", "appkey2" };
+		write_manifest(manifest_path, twokeys);
+		vr::EVRApplicationError erra0 = a->appi->AddApplicationManifest(manifest_path, true);
+		uint32_t counta0 = a->appi->GetApplicationCount();
+		dump_apps(a->appi);
+
+		std::vector<std::string> nokeys;
+		write_manifest(manifest_path, nokeys);
+		vr::EVRApplicationError erra1 = a->appi->AddApplicationManifest(manifest_path, true);
+		uint32_t counta1 = a->appi->GetApplicationCount();
+		dump_apps(a->appi);
+
+		write_manifest(manifest_path, twokeys);
+		vr::EVRApplicationError erra2 = a->appi->AddApplicationManifest(manifest_path, true);
+		uint32_t counta2 = a->appi->GetApplicationCount();
+		dump_apps(a->appi);
+
+		dprintf("bla");
+	}
 
 	// there are race conditions in the application count
 	{

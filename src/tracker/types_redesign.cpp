@@ -6308,9 +6308,8 @@ uint32_t VRApplicationsCursor::GetApplicationsThatSupportMimeType(const char * p
 uint32_t VRApplicationsCursor::GetApplicationLaunchArguments(uint32_t unHandle, char * pchArgs, uint32_t unArgs)
 {
 	LOG_ENTRY("CppStubGetApplicationLaunchArguments");
-
-	application_launch_arguments
-	
+	assert(0); // todo
+	uint32_t rc = 2;
 	LOG_EXIT_RC(rc, "CppStubGetApplicationLaunchArguments");
 }
 
