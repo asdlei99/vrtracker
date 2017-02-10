@@ -1567,7 +1567,8 @@ struct vrschema
 			INIT(current_scene_process_id),
 			INIT(active_application_indexes),
 			mime_types(allocator),
-			applications(allocator)
+			applications(allocator),
+			applications_helper(nullptr)
 		{}
 
 		VDECL(starting_application, EVRApplicationError, char);
@@ -2734,9 +2735,8 @@ struct ApplicationsWrapper
 		return result;
 	}
 
-	inline vector_result<char, EVRApplicationError> GetApplicationKeyByIndex(uint32_t app_index)
+	inline vector_result<char, EVRApplicationError> &GetApplicationKeyByIndex(uint32_t app_index, vector_result<char, EVRApplicationError> &result)
 	{
-		vector_result<char, EVRApplicationError> result(string_pool);
 		query_vector_rcerror(&result, appi, &IVRApplications::GetApplicationKeyByIndex, app_index);
 		return result;
 	}
@@ -4037,10 +4037,24 @@ static void visit_system_node(
 class ApplicationsHelper
 {
 public:
-	void update(std::vector<int> *active_indexes, ApplicationsWrapper &ow);
-
+	void update(std::vector<int> *active_indexes, ApplicationsWrapper &ow)
+	{
+		scalar<uint32_t> count = ow.GetApplicationCount();
+		active_indexes->reserve(count.val);
+		for (int i = 0; i < (int)count.val; i++)
+		{				
+			vector_result<char, EVRApplicationError> result(ow.string_pool);
+			ow.GetApplicationKeyByIndex(i, result);
+			std::string key(result.s.buf());	// todo get rid of stupid string
+			int index = get_index_for_key(key);	// automatically populates keys
+			active_indexes->push_back(index);
+		}
+	}
 	// number of applications ever seen
-	int get_num_applications();
+	int get_num_applications()
+	{
+		return app_keys.size();
+	}
 
 	// index to key mapping
 	// say
@@ -4058,14 +4072,48 @@ public:
 		return ref.c_str();
 	}
 
+	// return a valid index for a key (ie has to be in the active_indexes_set)
+	// blargh - overlay doesn't check it versus the active_indexes - and relies on
+	// the presence state to indicate to the caller if the value is dead.
+	int get_index_for_key(const char *key)
+	{
+		int ret = -1;
+		if (key)
+		{
+			std::string skey(key);	// todo blargh, just use char *
+			auto iter = app_keys2index.find(skey);
+			if (iter != app_keys2index.end())
+			{
+				ret = iter->second;
+			}
+		}
+		return ret;
+	}
+
+
+private:
+	// return an index.  if the key doesn't exist yet add it.
+	int get_index_for_key(const std::string &key)
+	{
+		int rc;
+		auto iter = app_keys2index.find(key);
+		if (iter != app_keys2index.end())
+		{
+			rc = iter->second;
+		}
+		else
+		{
+			app_keys.push_back(key);					// update caches
+			rc = app_keys.size() - 1;
+			app_keys2index.insert(iter, { key, rc });
+		}
+		return rc;
+	}
+
 	std::vector<std::string> app_keys;
 	std::unordered_map<std::string, int> app_keys2index;
 };
 
-// 
-// consider 
-// appa
-// a
 
 template <typename visitor_fn>
 void visit_application_state(visitor_fn &visitor, vrstate::application_schema *ss,
@@ -4097,21 +4145,6 @@ void visit_application_state(visitor_fn &visitor, vrstate::application_schema *s
 	visit_string_properties(visitor, ss->string_props, wrap, app_key);
 	visit_properties(visitor, ss->bool_props, wrap, app_key);
 	visit_properties(visitor, ss->uint64_props, wrap, app_key);
-#if 0
-	}
-	else
-	{
-		visitor.visit_node(ss->application_key.item);
-		visitor.visit_node(ss->is_installed.item);
-		visitor.visit_node(ss->auto_launch.item);
-		visitor.visit_node(ss->process_id.item);
-		visitor.visit_node(ss->supported_mime_types.item);
-		visitor.visit_node(ss->application_launch_arguments.item);
-		visit_string_properties(visitor, ss->string_props, wrap, "");
-		visit_properties(visitor, ss->bool_props, wrap, "");
-		visit_properties(visitor, ss->uint64_props, wrap, "");
-	}
-#endif
 
 	visitor.end_group_node("applications_node", app_index);
 }
@@ -5201,6 +5234,8 @@ static int util_char_vector_cmp(const char *pch, std::vector<char, ALLOCATOR_TYP
 	}
 }
 
+
+
 template <typename T>
 static bool util_vector_to_return_buf_rc(
 	std::vector<T, ALLOCATOR_TYPE> *p,
@@ -5228,30 +5263,20 @@ static bool util_vector_to_return_buf_rc(
 	return big_enough;
 }
 
-// specialized for char to terminate the buffer
-template <>
-static bool util_vector_to_return_buf_rc<char>(
-	std::vector<char, ALLOCATOR_TYPE> *p,
-	char *pRet,
-	uint32_t unBufferCount,
-	uint32_t *rc)
+bool util_char_to_return_buf_rc(const char *val, size_t required_size, char *pRet, uint32_t unBufferCount, uint32_t *rc)
 {
 	bool big_enough = true;
-	uint32_t required_size = p->size(); // size to hold the string including the trailing null
-										// note that p is not an 'std::string' its a vector and it include the trailing null
-
-	assert(p->size() == 0 || p->at(p->size() - 1) == 0); // (proof that p always has the trailing null)
-
+	
 	if (pRet && unBufferCount > 0)
 	{
-		if (p->size() == 0)
+		if (required_size == 0)
 		{
 			pRet[0] = 0;
 		}
 		else
 		{
 			uint32_t bytes_to_write = min(unBufferCount, required_size);
-			memcpy(pRet, &p->at(0), bytes_to_write);
+			memcpy(pRet, val, bytes_to_write);
 			if (bytes_to_write < required_size)
 			{
 				big_enough = false;
@@ -5269,6 +5294,28 @@ static bool util_vector_to_return_buf_rc<char>(
 		*rc = required_size;
 	}
 	return big_enough;
+}
+
+// specialized for char to terminate the buffer
+template <>
+static bool util_vector_to_return_buf_rc<char>(
+	std::vector<char, ALLOCATOR_TYPE> *p,
+	char *pRet,
+	uint32_t unBufferCount,
+	uint32_t *rc)
+{
+	uint32_t required_size = p->size(); // size to hold the string including the trailing null
+										// note that p is not an 'std::string' its a vector and it include the trailing null
+
+	assert(p->size() == 0 || p->at(p->size() - 1) == 0); // (proof that p always has the trailing null)
+
+	char *ptr = nullptr;
+	if (p->size() > 0)
+	{
+		ptr = &p->at(0);
+	}
+
+	return util_char_to_return_buf_rc(ptr, p->size(), pRet, unBufferCount, rc);
 }
 
 struct CursorContext
@@ -6082,43 +6129,30 @@ struct VRApplicationsCursor : public VRApplicationsCppStub
 	bool IsQuitUserPromptRequested() override;
 	uint32_t GetCurrentSceneProcessId() override;
 
-	bool IsValidAppIndex(uint32_t unApplicationIndex);
-	bool GetIndexForAppKey(const char *pchKey, int *index);
+	bool GetInternalIndexForAppKey(const char *pchKey, int *index);
 
 };
 
 #define SYNC_APP_STATE(local_name, variable_name) \
+SynchronizeChildVectors();\
 auto local_name ## iter = m_context->iterators->applications_node.variable_name;\
 update_iter(local_name ## iter,\
 	m_context->state->applications_node.variable_name,\
 	m_context->current_frame);\
 auto & local_name = local_name ## iter ## .item;
 
-bool VRApplicationsCursor::GetIndexForAppKey(const char *key, int *index)
+bool VRApplicationsCursor::GetInternalIndexForAppKey(const char *key, int *index_ret)
 {
-	SynchronizeChildVectors();
-	if (key == nullptr)
+	if (state_ref.applications_helper)
 	{
-		return false;
-	}
-	for (int i = 0; i < (int)m_context->iterators->applications_node.applications.size(); i++)
-	{
-		SYNC_APP_STATE(app_key, applications[i].application_key);
-		if (app_key->is_present() && strcmp(&app_key->val[0], key) == 0)
+		int index = state_ref.applications_helper->get_index_for_key(key);
+		if (index != -1)
 		{
-			*index = i;
+			*index_ret = index;
 			return true;
 		}
 	}
-	return false; 
-}
-
-bool VRApplicationsCursor::IsValidAppIndex(uint32_t unApplicationIndex)
-{
-	if (unApplicationIndex >= 0 && (unApplicationIndex < (int)m_context->iterators->applications_node.applications.size()))
-		return true;
-	else
-		return false;
+	return false;
 }
 
 bool VRApplicationsCursor::IsApplicationInstalled(const char * pchAppKey)
@@ -6126,7 +6160,7 @@ bool VRApplicationsCursor::IsApplicationInstalled(const char * pchAppKey)
 	LOG_ENTRY("CppStubIsApplicationInstalled");
 	bool rc = false;
 	int index;
-	if (GetIndexForAppKey(pchAppKey, &index))
+	if (GetInternalIndexForAppKey(pchAppKey, &index))
 	{
 		SYNC_APP_STATE(is_app_installed, applications[index].is_installed);
 		if (is_app_installed->is_present() && is_app_installed->val)
@@ -6140,7 +6174,7 @@ bool VRApplicationsCursor::IsApplicationInstalled(const char * pchAppKey)
 uint32_t VRApplicationsCursor::GetApplicationCount()
 {
 	LOG_ENTRY("CppStubGetApplicationCount");
-	SynchronizeChildVectors();
+	
 	SYNC_APP_STATE(active_application_indexes, active_application_indexes);
 	uint32_t rc = active_application_indexes->val.size();
 	LOG_EXIT_RC(rc, "CppStubGetApplicationCount");
@@ -6168,15 +6202,27 @@ vr::EVRApplicationError return_app_key(T &app_key, char * pchAppKeyBuffer, uint3
 	return rc;
 }
 
-vr::EVRApplicationError VRApplicationsCursor::GetApplicationKeyByIndex(uint32_t unApplicationIndex, char * pchAppKeyBuffer, uint32_t unAppKeyBufferLen)
+// since caller is asking for unApplicationIndex, need to map from External to internal index
+vr::EVRApplicationError VRApplicationsCursor::GetApplicationKeyByIndex(uint32_t unExternalApplicationIndex, char * pchAppKeyBuffer, uint32_t unAppKeyBufferLen)
 {
 	LOG_ENTRY("CppStubGetApplicationKeyByIndex");
 
 	vr::EVRApplicationError rc = VRApplicationError_InvalidIndex;
-	if (IsValidAppIndex(unApplicationIndex))
+	
+	SYNC_APP_STATE(active_application_indexes, active_application_indexes);
+	if (unExternalApplicationIndex < active_application_indexes->val.size())
 	{
-		SYNC_APP_STATE(app_key, applications[unApplicationIndex].application_key);
-		rc = return_app_key(app_key, pchAppKeyBuffer, unAppKeyBufferLen);
+		int internal_index = active_application_indexes->val[unExternalApplicationIndex];
+		int count;
+		const char *app_key = state_ref.applications_helper->get_key_for_index(internal_index, &count);
+		if (util_char_to_return_buf_rc(app_key, count, pchAppKeyBuffer, unAppKeyBufferLen, nullptr))
+		{
+			rc = VRApplicationError_None;
+		}
+		else
+		{
+			rc = VRApplicationError_BufferTooSmall;
+		}
 	}
 	LOG_EXIT_RC(rc, "CppStubGetApplicationKeyByIndex");
 }
@@ -6208,10 +6254,10 @@ uint32_t VRApplicationsCursor::GetApplicationProcessId(const char * pchAppKey)
 	LOG_ENTRY("CppStubGetApplicationProcessId");
 
 	uint32_t rc = 0;
-	int index;
-	if (GetIndexForAppKey(pchAppKey, &index))
+	int internal_index;
+	if (GetInternalIndexForAppKey(pchAppKey, &internal_index))
 	{
-		SYNC_APP_STATE(process_id, applications[index].process_id);
+		SYNC_APP_STATE(process_id, applications[internal_index].process_id);
 		if (process_id->is_present())
 		{
 			rc = process_id->val;
@@ -6242,13 +6288,13 @@ uint32_t VRApplicationsCursor::GetApplicationPropertyString(
 		pchValue[0] = '\0';
 	}
 
-	int index;
-	if (GetIndexForAppKey(pchAppKey, &index))
+	int internal_index;
+	if (GetInternalIndexForAppKey(pchAppKey, &internal_index))
 	{
 		std::vector<char, ALLOCATOR_TYPE> *p;
 		if (lookup_subtable_property(
-				m_context->state->applications_node.applications[index].string_props,
-				m_context->iterators->applications_node.applications[index].string_props,
+				m_context->state->applications_node.applications[internal_index].string_props,
+				m_context->iterators->applications_node.applications[internal_index].string_props,
 				m_context->current_frame,
 				prop_enum, &p, pError))
 		{
@@ -6264,13 +6310,13 @@ bool VRApplicationsCursor::GetApplicationPropertyBool(
 {
 	LOG_ENTRY("CppStubGetApplicationPropertyBool");
 	bool rc = false;
-	int index;
-	if (GetIndexForAppKey(pchAppKey, &index))
+	int internal_index;
+	if (GetInternalIndexForAppKey(pchAppKey, &internal_index))
 	{
 		bool *p;
 		lookup_subtable_property(
-				m_context->state->applications_node.applications[index].bool_props,
-				m_context->iterators->applications_node.applications[index].bool_props,
+				m_context->state->applications_node.applications[internal_index].bool_props,
+				m_context->iterators->applications_node.applications[internal_index].bool_props,
 				m_context->current_frame,
 			prop_enum, &p, pError);
 		rc = *p;
@@ -6285,13 +6331,13 @@ uint64_t VRApplicationsCursor::GetApplicationPropertyUint64(const char * pchAppK
 	LOG_ENTRY("CppStubGetApplicationPropertyUint64");
 	
 	uint64_t rc = 0;
-	int index;
-	if (GetIndexForAppKey(pchAppKey, &index))
+	int internal_index;
+	if (GetInternalIndexForAppKey(pchAppKey, &internal_index))
 	{
 		uint64_t *p;
 		lookup_subtable_property(
-			m_context->state->applications_node.applications[index].uint64_props,
-			m_context->iterators->applications_node.applications[index].uint64_props,
+			m_context->state->applications_node.applications[internal_index].uint64_props,
+			m_context->iterators->applications_node.applications[internal_index].uint64_props,
 			m_context->current_frame,
 			prop_enum, &p, pError);
 		rc = *p;
@@ -6304,10 +6350,10 @@ bool VRApplicationsCursor::GetApplicationAutoLaunch(const char * pchAppKey)
 {
 	LOG_ENTRY("CppStubGetApplicationAutoLaunch");
 	bool rc = false;
-	int index;
-	if (GetIndexForAppKey(pchAppKey, &index))
+	int internal_index;
+	if (GetInternalIndexForAppKey(pchAppKey, &internal_index))
 	{
-		SYNC_APP_STATE(auto_launch, applications[index].auto_launch);
+		SYNC_APP_STATE(auto_launch, applications[internal_index].auto_launch);
 		rc = auto_launch->is_present() && auto_launch->val;
 	}
 	LOG_EXIT_RC(rc, "CppStubGetApplicationAutoLaunch");
@@ -6343,10 +6389,10 @@ bool VRApplicationsCursor::GetApplicationSupportedMimeTypes(const char * pchAppK
 	LOG_ENTRY("CppStubGetApplicationSupportedMimeTypes");
 	
 	bool rc = false;
-	int index;
-	if (GetIndexForAppKey(pchAppKey, &index))
+	int internal_index;
+	if (GetInternalIndexForAppKey(pchAppKey, &internal_index))
 	{
-		SYNC_APP_STATE(supported_mime_types, applications[index].supported_mime_types);
+		SYNC_APP_STATE(supported_mime_types, applications[internal_index].supported_mime_types);
 		if (supported_mime_types->is_present())
 		{
 			rc = util_vector_to_return_buf_rc(&supported_mime_types->val, Buffer, Len, nullptr);
@@ -8334,7 +8380,9 @@ vr::EVRTrackedCameraError VRTrackedCameraCursor::GetCameraFrameSize(
 	if (nDeviceIndex < iter_ref.controllers.size())
 	{
 		SYNC_TRACKEDCAMERA_STATE(size, controllers[nDeviceIndex].cameraframetypes[(int)eFrameType].frame_size);
-		if (size->is_present())
+		
+		// 2/10/2017: regardless of presence, write the stuffed value back to the caller
+		//if (size->is_present())
 		{
 			if (pnWidth)
 				*pnWidth = size->val.width;

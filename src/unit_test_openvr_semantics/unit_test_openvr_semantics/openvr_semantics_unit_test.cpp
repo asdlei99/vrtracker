@@ -1416,16 +1416,21 @@ void compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 	}
 }
 
-static void dump_apps(vr::IVRApplications *appi)
+static void compare_apps(vr::IVRApplications *a_appi, vr::IVRApplications *b_appi)
 {
-	uint32_t counta1 = appi->GetApplicationCount();
+	uint32_t counta1 = a_appi->GetApplicationCount();
+	uint32_t countb1 = b_appi->GetApplicationCount();
+
+	assert(counta1 == countb1);
 
 	for (int i = 0; i < (int)counta1; i++)
 	{
-		char buf[256];
-		vr::EVRApplicationError erra = appi->GetApplicationKeyByIndex(i, buf, sizeof(buf));
-
-		dprintf("%s\n", buf);
+		char bufa[256];
+		char bufb[256];
+		vr::EVRApplicationError erra = a_appi->GetApplicationKeyByIndex(i, bufa, sizeof(bufa));
+		vr::EVRApplicationError errb = b_appi->GetApplicationKeyByIndex(i, bufb, sizeof(bufb));
+		assert(erra == errb);
+		assert(strcmp(bufa, bufb) == 0);
 	}
 }
 
@@ -1500,21 +1505,30 @@ void compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 		std::vector<std::string> twokeys = { "appkey1", "appkey2" };
 		write_manifest(manifest_path, twokeys);
 		vr::EVRApplicationError erra0 = a->appi->AddApplicationManifest(manifest_path, true);
-		uint32_t counta0 = a->appi->GetApplicationCount();
-		dump_apps(a->appi);
+		vr::EVRApplicationError errb0 = b->appi->AddApplicationManifest(manifest_path, true);
+		assert(erra0 == errb0);
 
+		ia->Refresh();
+		ib->Refresh();
+		compare_apps(a->appi, b->appi);
+		
 		std::vector<std::string> nokeys;
 		write_manifest(manifest_path, nokeys);
 		vr::EVRApplicationError erra1 = a->appi->AddApplicationManifest(manifest_path, true);
-		uint32_t counta1 = a->appi->GetApplicationCount();
-		dump_apps(a->appi);
+		vr::EVRApplicationError errb1 = b->appi->AddApplicationManifest(manifest_path, true);
+		assert(erra1 == errb1);
+
+		ia->Refresh();
+		ib->Refresh();
+		compare_apps(a->appi, b->appi);
 
 		write_manifest(manifest_path, twokeys);
 		vr::EVRApplicationError erra2 = a->appi->AddApplicationManifest(manifest_path, true);
-		uint32_t counta2 = a->appi->GetApplicationCount();
-		dump_apps(a->appi);
-
-		dprintf("bla");
+		vr::EVRApplicationError errb2 = b->appi->AddApplicationManifest(manifest_path, true);
+		assert(erra2 == errb2);
+		ia->Refresh();
+		ib->Refresh();
+		compare_apps(a->appi, b->appi);
 	}
 
 	// there are race conditions in the application count
@@ -2002,8 +2016,14 @@ void compare_taci_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderT
 	{
 		for (int j = 0; j < vr::MAX_CAMERA_FRAME_TYPES; j++)
 		{
-			uint32_t wa, ha, sizea;
-			uint32_t wb, hb, sizeb;
+			uint32_t wa = uninit_uint();
+			uint32_t ha = uninit_uint();
+			uint32_t sizea = uninit_uint();
+			
+			uint32_t wb = uninit_uint();
+			uint32_t hb = uninit_uint();
+			uint32_t sizeb = uninit_uint();
+
 			vr::EVRTrackedCameraError rca = a->taci->GetCameraFrameSize(i, (vr::EVRTrackedCameraFrameType)j, &wa, &ha, &sizea);
 			vr::EVRTrackedCameraError rcb = b->taci->GetCameraFrameSize(i, (vr::EVRTrackedCameraFrameType)j, &wb, &hb, &sizeb);
 			assert(rca == rcb);
