@@ -1325,6 +1325,7 @@ struct HistoryVectorNodeOrIterator<T, P, false> : HistoryNode
 
 
 class OverlayHelper;
+class ApplicationsHelper;
 
 template <bool bIsIterator>
 struct vrschema
@@ -1530,7 +1531,7 @@ struct vrschema
 			uint64_props(application_uint64_properties_table,TBL_SIZE(application_uint64_properties_table), allocator)
 		{}
 
-		VDECL(application_key, EVRApplicationError, char);
+		VDECL(application_key, AlwaysAndForever, char);
 		SDECL(is_installed, AlwaysAndForever, bool);
 		SDECL(auto_launch, AlwaysAndForever, bool); 
 		VDECL(supported_mime_types, bool, char);
@@ -1563,8 +1564,8 @@ struct vrschema
 			INIT(starting_application),
 			INIT(transition_state),
 			INIT(is_quit_user_prompt),
-			INIT(num_applications),
 			INIT(current_scene_process_id),
+			INIT(active_application_indexes),
 			mime_types(allocator),
 			applications(allocator)
 		{}
@@ -1573,13 +1574,11 @@ struct vrschema
 		SDECL(transition_state, AlwaysAndForever, EVRApplicationTransitionState);
 		SDECL(is_quit_user_prompt, AlwaysAndForever, bool);
 		SDECL(current_scene_process_id, AlwaysAndForever, uint32_t);
-
-		// 2/1/2017 applications is monotonically increasing.  but number of applications at a point
-		// in time varies:
-		SDECL(num_applications, AlwaysAndForever, uint32_t);
-
+		VDECL(active_application_indexes, AlwaysAndForever, int);
+		
 		std::vector<mime_type_schema, ALLOCATOR_TYPE> mime_types;
 		std::vector<application_schema, ALLOCATOR_TYPE> applications;
+		ApplicationsHelper *applications_helper;
 	};
 
 	struct settings_schema
@@ -4031,34 +4030,74 @@ static void visit_system_node(
 
 	END_VECTOR(spatial_sorts);
 
-
-
 	visitor.end_group_node("system_node", 0);
 }
 
+// knows how to map indexes to application keys
+class ApplicationsHelper
+{
+public:
+	void update(std::vector<int> *active_indexes, ApplicationsWrapper &ow);
+
+	// number of applications ever seen
+	int get_num_applications();
+
+	// index to key mapping
+	// say
+	// To
+	// appa,appb,appc
+	// T1
+	// appa,appc
+	// 
+	// the appb disappeared - the key is gone from OpenVR - so the AppHelper will hold it
+
+	const char *get_key_for_index(uint32_t app_index, int *count)
+	{
+		auto &ref = app_keys[app_index];
+		*count = ref.size()+1;
+		return ref.c_str();
+	}
+
+	std::vector<std::string> app_keys;
+	std::unordered_map<std::string, int> app_keys2index;
+};
+
+// 
+// consider 
+// appa
+// a
+
 template <typename visitor_fn>
 void visit_application_state(visitor_fn &visitor, vrstate::application_schema *ss,
-	ApplicationsWrapper wrap, uint32_t app_index)
+	ApplicationsWrapper wrap, uint32_t app_index, ApplicationsHelper *helper)
 {
 	visitor.start_group_node("app", app_index);
 
+	const char *app_key;
 	if (visitor.visit_openvr())
 	{
-		const char *app_key = "";
-		vector_result<char, EVRApplicationError> application_key(wrap.string_pool);
-		application_key = wrap.GetApplicationKeyByIndex(app_index);
-		visitor.visit_node(ss->application_key.item, application_key.s.buf(), application_key.result_code, application_key.count);
-		app_key = application_key.s.buf();
-		LEAF_SCALAR(is_installed, wrap.IsApplicationInstalled(app_key));
-		LEAF_SCALAR(auto_launch, wrap.GetApplicationAutoLaunch(app_key));
+		int count;
+		app_key = helper->get_key_for_index(app_index, &count);
+		visitor.visit_node(ss->application_key.item, app_key, count);
 		scalar<uint32_t> process_id = wrap.GetApplicationProcessId(app_key);
-		visitor.visit_node(ss->process_id.item, process_id);
-		LEAF_VECTOR1(supported_mime_types, wrap.GetApplicationSupportedMimeTypes(app_key));
+		LEAF_SCALAR(process_id, process_id);
 		LEAF_VECTOR0(application_launch_arguments, wrap.GetApplicationLaunchArguments(process_id.val));
+	}
+	else
+	{
+		visitor.visit_node(ss->application_key.item);
+		visitor.visit_node(ss->process_id.item);
+		visitor.visit_node(ss->application_launch_arguments.item);
+	}
 
-		visit_string_properties(visitor, ss->string_props, wrap, app_key);
-		visit_properties(visitor, ss->bool_props, wrap, app_key);
-		visit_properties(visitor, ss->uint64_props, wrap, app_key);
+	LEAF_SCALAR(is_installed, wrap.IsApplicationInstalled(app_key));
+	LEAF_SCALAR(auto_launch, wrap.GetApplicationAutoLaunch(app_key));
+	LEAF_VECTOR1(supported_mime_types, wrap.GetApplicationSupportedMimeTypes(app_key));
+	
+	visit_string_properties(visitor, ss->string_props, wrap, app_key);
+	visit_properties(visitor, ss->bool_props, wrap, app_key);
+	visit_properties(visitor, ss->uint64_props, wrap, app_key);
+#if 0
 	}
 	else
 	{
@@ -4072,6 +4111,7 @@ void visit_application_state(visitor_fn &visitor, vrstate::application_schema *s
 		visit_properties(visitor, ss->bool_props, wrap, "");
 		visit_properties(visitor, ss->uint64_props, wrap, "");
 	}
+#endif
 
 	visitor.end_group_node("applications_node", app_index);
 }
@@ -4094,17 +4134,46 @@ void visit_mime_type_schema(visitor_fn &visitor, vrstate::mime_type_schema *ss,
 	LEAF_VECTOR0(applications_that_support_mime_type, wrap.GetApplicationsThatSupportMimeType(mime_type));
 }
 
+
 template <typename visitor_fn>
 static void visit_applications_node(visitor_fn &visitor, vrstate::applications_schema *ss, ApplicationsWrapper wrap, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("app", -1);
 
+	if (visitor.visit_openvr())
+	{
+		std::vector<int> active_indexes;
+		if (!ss->applications_helper)
+		{
+			ss->applications_helper = new ApplicationsHelper();
+		}
+		ss->applications_helper->update(&active_indexes, wrap);
+
+		int *ptr = nullptr;
+		if (active_indexes.size() > 0)
+		{
+			ptr = &active_indexes.at(0);
+		}
+		visitor.visit_node(ss->active_application_indexes.item, ptr, active_indexes.size());
+	}
+	else
+	{
+		visitor.visit_node(ss->active_application_indexes.item);
+	}
+
+	if (ss->applications_helper && ss->applications_helper->get_num_applications() > (int)ss->applications.size())
+	{
+		ss->applications.reserve(ss->applications_helper->get_num_applications());
+		while ((int)ss->applications.size() < ss->applications_helper->get_num_applications())
+		{
+			ss->applications.emplace_back(allocator);
+		}
+	}
+
 	LEAF_VECTOR1(starting_application, wrap.GetStartingApplication());
 	LEAF_SCALAR(transition_state, wrap.GetTransitionState());
 	LEAF_SCALAR(is_quit_user_prompt, wrap.IsQuitUserPromptRequested());
-	LEAF_SCALAR(num_applications, wrap.GetApplicationCount());
 	LEAF_SCALAR(current_scene_process_id, wrap.GetCurrentSceneProcessId());
-	
 
 	ss->mime_types.reserve(mime_tbl_size);
 	while (ss->mime_types.size() < mime_tbl_size)
@@ -4119,22 +4188,10 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 	}
 	END_VECTOR(mime_types);
 
-	int app_count = (int)ss->applications.size();
-	if (visitor.visit_openvr())
-	{
-		scalar<uint32_t> app_count_vr = wrap.GetApplicationCount();
-		app_count = app_count_vr.val;
-		ss->applications.reserve(app_count);
-		while ((int)ss->applications.size() < app_count)
-		{
-			ss->applications.emplace_back(allocator);
-		}
-	}
-
 	START_VECTOR(applications);
 	for (int i = 0; i < (int)ss->applications.size(); i++)
 	{
-		visit_application_state(visitor, &ss->applications[i], wrap, i);
+		visit_application_state(visitor, &ss->applications[i], wrap, i, ss->applications_helper);
 	}
 	END_VECTOR(applications);
 
@@ -4555,6 +4612,7 @@ static void visit_per_overlay(
 		visitor.visit_node(ss->overlay_transform_component_relative_name.item);
 	}
 }
+
 
 // the idea of the overlay helper is to make it possible to index this thing using integer indexes
 // despite the fact that openvr interfaces index using both overlay handles AND string keys
@@ -6083,8 +6141,8 @@ uint32_t VRApplicationsCursor::GetApplicationCount()
 {
 	LOG_ENTRY("CppStubGetApplicationCount");
 	SynchronizeChildVectors();
-	SYNC_APP_STATE(num_applications, num_applications);
-	uint32_t rc = num_applications->val;
+	SYNC_APP_STATE(active_application_indexes, active_application_indexes);
+	uint32_t rc = active_application_indexes->val.size();
 	LOG_EXIT_RC(rc, "CppStubGetApplicationCount");
 }
 
@@ -6105,7 +6163,7 @@ vr::EVRApplicationError return_app_key(T &app_key, char * pchAppKeyBuffer, uint3
 	}
 	else
 	{
-		rc = app_key->presence;
+		rc = vr::VRApplicationError_InvalidApplication;
 	}
 	return rc;
 }
@@ -7922,7 +7980,6 @@ void VRRenderModelsCursor::GetControllerIndicesMatchingRenderModel(
 		}
 	}
 }
-
 
 bool VRRenderModelsCursor::GetComponentState(
 			const char * pchRenderModelName, 
