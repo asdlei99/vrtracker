@@ -874,8 +874,7 @@ struct TMP
 
 	TMP(const TMP&rhs)
 	{
-		assert(0);
-		// nasty
+		assert(0);  // this assert is here to debug problems in uper level code which are not meant to use this
 		s = make_s();
 		memcpy(s, rhs.s, TMP_BUF_BYTES);	// this is nasty because I have no idea how big the actual contents are
 		p = rhs->p;
@@ -883,8 +882,7 @@ struct TMP
 
 	TMP &operator = (const TMP &rhs)
 	{
-		// nasty
-		assert(0);
+		assert(0); // this assert is here to debug problems in uper level code which are not meant to use this
 		memcpy(s, rhs.s, TMP_BUF_BYTES);
 		p = rhs->p;
 		return *this;
@@ -1324,8 +1322,8 @@ struct HistoryVectorNodeOrIterator<T, P, false> : HistoryNode
 };
 
 
-class OverlayHelper;
-class ApplicationsHelper;
+class OverlayIndexer;
+class ApplicationsIndexer;
 
 template <bool bIsIterator>
 struct vrschema
@@ -1567,8 +1565,7 @@ struct vrschema
 			INIT(current_scene_process_id),
 			INIT(active_application_indexes),
 			mime_types(allocator),
-			applications(allocator),
-			applications_helper(nullptr)
+			applications(allocator)
 		{}
 
 		VDECL(starting_application, EVRApplicationError, char);
@@ -1579,7 +1576,6 @@ struct vrschema
 		
 		std::vector<mime_type_schema, ALLOCATOR_TYPE> mime_types;
 		std::vector<application_schema, ALLOCATOR_TYPE> applications;
-		ApplicationsHelper *applications_helper;
 	};
 
 	struct settings_schema
@@ -1832,8 +1828,7 @@ struct vrschema
 			INIT(is_dashboard_visible),
 			INIT(active_overlay_indexes),
 			INIT(keyboard_text),
-			overlays(allocator),
-			overlay_helper(nullptr)
+			overlays(allocator)
 		{}
 
 		SDECL(gamepad_focus_overlay, AlwaysAndForever, vr::VROverlayHandle_t);
@@ -1843,8 +1838,6 @@ struct vrschema
 		VDECL(keyboard_text, AlwaysAndForever, char);
 		
 		std::vector<per_overlay_state, ALLOCATOR_TYPE> overlays;
-		OverlayHelper *overlay_helper;	 // this helper is needed to be able to map from external keys to indexes into the overlays vector
-										 // used by: UpdateVisitor and by OverlayCursor
 	};
 
 	struct rendermodel_component_schema
@@ -3466,11 +3459,205 @@ struct ResourcesWrapper
 	StringPool *string_pool;
 };
 
-
-struct TrackerConfigInternal
+// create internal index for a key
+// overlays: keyed on string,handle->index
+// apps: keyed on string->index
+// resources: name,dir/name/full_path->index
+// unArgsHandle: uint32_t->index
+class InternalIndexer
 {
-	TrackerConfigInternal(const TrackerConfig &c, ALLOCATOR_DECL)
-		:	m_overlay_keys(allocator),
+
+
+};
+
+// knows how to map indexes to application keys
+class ApplicationsIndexer
+{
+public:
+	ApplicationsIndexer()
+	{
+	}
+
+	void update(std::vector<int> *active_indexes, ApplicationsWrapper &ow)
+	{
+		scalar<uint32_t> count = ow.GetApplicationCount();
+		active_indexes->reserve(count.val);
+		for (int i = 0; i < (int)count.val; i++)
+		{
+			vector_result<char, EVRApplicationError> result(ow.string_pool);
+			ow.GetApplicationKeyByIndex(i, result);
+			std::string key(result.s.buf());	// todo get rid of stupid string
+			int index = get_index_for_key(key);	// automatically populates keys
+			active_indexes->push_back(index);
+		}
+	}
+	// number of applications ever seen
+	int get_num_applications()
+	{
+		return app_keys.size();
+	}
+
+	// index to key mapping
+	// say
+	// To
+	// appa,appb,appc
+	// T1
+	// appa,appc
+	// 
+	// the appb disappeared - the key is gone from OpenVR - so the AppHelper will hold it
+
+	const char *get_key_for_index(uint32_t app_index, int *count)
+	{
+		auto &ref = app_keys[app_index];
+		*count = ref.size() + 1;
+		return ref.c_str();
+	}
+
+	// return a valid index for a key (ie has to be in the active_indexes_set)
+	// blargh - overlay doesn't check it versus the active_indexes - and relies on
+	// the presence state to indicate to the caller if the value is dead.
+	int get_index_for_key(const char *key)
+	{
+		int ret = -1;
+		if (key)
+		{
+			std::string skey(key);	// todo blargh, just use char *
+			auto iter = app_keys2index.find(skey);
+			if (iter != app_keys2index.end())
+			{
+				ret = iter->second;
+			}
+		}
+		return ret;
+	}
+
+
+private:
+	// return an index.  if the key doesn't exist yet add it.
+	int get_index_for_key(const std::string &key)
+	{
+		int rc;
+		auto iter = app_keys2index.find(key);
+		if (iter != app_keys2index.end())
+		{
+			rc = iter->second;
+		}
+		else
+		{
+			app_keys.push_back(key);					// update caches
+			rc = app_keys.size() - 1;
+			app_keys2index.insert(iter, { key, rc });
+		}
+		return rc;
+	}
+
+	std::vector<std::string> app_keys;
+	std::unordered_map<std::string, int> app_keys2index;
+};
+
+
+
+// the idea of the overlay helper is to make it possible to index this thing using integer indexes
+// despite the fact that openvr interfaces index using both overlay handles AND string keys
+//
+class OverlayIndexer
+{
+public:
+	OverlayIndexer(const char **initial_overlay_names, int num_names)
+	{
+		for (int i = 0; i < num_names; i++)
+		{
+			std::string s(initial_overlay_names[i]);
+			get_overlay_index_for_key(s); // adds and assigns
+		}
+	}
+
+	// walks through known overlays and updates index set
+	void update(std::vector<int> *active_indexes, OverlayWrapper &ow)
+	{	
+		for (int i = 0; i < (int)overlay_keys.size(); i++)
+		{
+			vr::VROverlayHandle_t handle;
+			vr::EVROverlayError e = ow.ovi->FindOverlay(overlay_keys[i].c_str(), &handle);
+			if (e == vr::VROverlayError_None)
+			{
+				// this overlay is active.
+				// lookup it's index
+				int index = get_overlay_index_for_key(overlay_keys[i]);
+				active_indexes->push_back(index);
+				overlay_handle2index.insert({ handle, index });
+			}
+		}
+	}
+
+	int get_index_for_key(const char *key)
+	{
+		int ret = -1;
+		std::string skey(key);	// todo blargh, just use char *
+		auto iter = overlay_keys2index.find(skey);
+		if (iter != overlay_keys2index.end())
+		{
+			ret = iter->second;
+		}
+		return ret;
+	}
+	int get_index_for_handle(VROverlayHandle_t h)
+	{
+		int ret = -1;
+		auto iter = overlay_handle2index.find(h);
+		if (iter != overlay_handle2index.end())
+		{
+			ret = iter->second;
+		}
+		return ret;
+	}
+
+	const std::string &get_overlay_key_for_index(const uint32_t overlay_index)
+	{
+		return overlay_keys[overlay_index];
+	}
+
+	int get_num_overlays() const
+	{
+		return overlay_keys.size();
+	}
+
+private:
+	// return an index.  if the key doesn't exist yet add it.
+	int get_overlay_index_for_key(const std::string &key)
+	{
+		int rc;
+		auto iter = overlay_keys2index.find(key);
+		if (iter != overlay_keys2index.end())
+		{
+			rc = iter->second;
+		}
+		else
+		{
+			overlay_keys.push_back(key);					// update caches
+			rc = overlay_keys.size() - 1;
+			overlay_keys2index.insert(iter, { key, rc });
+		}
+		return rc;
+	}
+
+	std::vector<std::string> overlay_keys;
+	std::unordered_map<std::string, int> overlay_keys2index;
+	std::unordered_map<VROverlayHandle_t, int> overlay_handle2index;
+};
+
+
+//
+// resources outside of the bare openvr interfaces that need to be 
+// tracked 
+//
+struct AdditionalResourceKeys
+{
+	OverlayIndexer	&GetOverlayIndexer()			{ return m_overlay_indexer; }
+	ApplicationsIndexer &GetApplicationsIndexer()	{ return m_applications_indexer; }
+
+	AdditionalResourceKeys(const TrackerConfig &c, ALLOCATOR_DECL)
+		:	m_overlay_indexer(c.overlay_keys_to_sample, c.num_overlays_to_sample),
 			m_resource_directories(allocator),
 			m_resource_filenames(allocator)
 			
@@ -3484,15 +3671,6 @@ struct TrackerConfigInternal
 		collision_bounds_fade_distance = c.collision_bounds_fade_distance;
 		frame_timing_frames_ago = c.frame_timing_frames_ago;
 		frame_timings_num_frames = c.frame_timings_num_frames;
-
-		for (int i = 0; i < c.num_overlays_to_sample; i++)
-		{
-			m_overlay_keys.emplace_back(allocator);
-		}
-		for (int i = 0; i < c.num_overlays_to_sample; i++)
-		{
-			m_overlay_keys[i].assign(c.overlay_keys_to_sample[i]);
-		}
 
 		for (int i = 0; i < c.num_resources_to_sample; i++)
 		{
@@ -3521,7 +3699,9 @@ struct TrackerConfigInternal
 	uint32_t frame_timing_frames_ago;
 	uint32_t frame_timings_num_frames;
 
-	std::vector<std::basic_string<char, std::char_traits<char>, ALLOCATOR_TYPE>, ALLOCATOR_TYPE> m_overlay_keys;
+	OverlayIndexer m_overlay_indexer;
+	ApplicationsIndexer m_applications_indexer;
+
 	std::vector<std::basic_string<char, std::char_traits<char>, ALLOCATOR_TYPE>, ALLOCATOR_TYPE> m_resource_directories;
 	std::vector<std::basic_string<char, std::char_traits<char>, ALLOCATOR_TYPE>, ALLOCATOR_TYPE> m_resource_filenames;
 };
@@ -3701,7 +3881,7 @@ static void visit_eye_state(visitor_fn &visitor,
 							vrstate::eye_schema *ss, 
 							vr::EVREye eEye, 
 							IVRSystem *sysi, SystemWrapper wrap,
-							const TrackerConfigInternal &c,
+							const AdditionalResourceKeys &c,
 							ALLOCATOR_DECL)
 {
 	visitor.start_group_node("eye", eEye);
@@ -3879,7 +4059,7 @@ static void visit_system_node(
 								vrstate::system_schema *ss, 
 								IVRSystem *sysi, SystemWrapper sysw, 
 								RenderModelWrapper rmw, 
-								const TrackerConfigInternal &tracker_config,
+								const AdditionalResourceKeys &tracker_config,
 								ALLOCATOR_DECL)
 {
 	visitor.start_group_node("system", -1);
@@ -4033,91 +4213,10 @@ static void visit_system_node(
 	visitor.end_group_node("system_node", 0);
 }
 
-// knows how to map indexes to application keys
-class ApplicationsHelper
-{
-public:
-	void update(std::vector<int> *active_indexes, ApplicationsWrapper &ow)
-	{
-		scalar<uint32_t> count = ow.GetApplicationCount();
-		active_indexes->reserve(count.val);
-		for (int i = 0; i < (int)count.val; i++)
-		{				
-			vector_result<char, EVRApplicationError> result(ow.string_pool);
-			ow.GetApplicationKeyByIndex(i, result);
-			std::string key(result.s.buf());	// todo get rid of stupid string
-			int index = get_index_for_key(key);	// automatically populates keys
-			active_indexes->push_back(index);
-		}
-	}
-	// number of applications ever seen
-	int get_num_applications()
-	{
-		return app_keys.size();
-	}
-
-	// index to key mapping
-	// say
-	// To
-	// appa,appb,appc
-	// T1
-	// appa,appc
-	// 
-	// the appb disappeared - the key is gone from OpenVR - so the AppHelper will hold it
-
-	const char *get_key_for_index(uint32_t app_index, int *count)
-	{
-		auto &ref = app_keys[app_index];
-		*count = ref.size()+1;
-		return ref.c_str();
-	}
-
-	// return a valid index for a key (ie has to be in the active_indexes_set)
-	// blargh - overlay doesn't check it versus the active_indexes - and relies on
-	// the presence state to indicate to the caller if the value is dead.
-	int get_index_for_key(const char *key)
-	{
-		int ret = -1;
-		if (key)
-		{
-			std::string skey(key);	// todo blargh, just use char *
-			auto iter = app_keys2index.find(skey);
-			if (iter != app_keys2index.end())
-			{
-				ret = iter->second;
-			}
-		}
-		return ret;
-	}
-
-
-private:
-	// return an index.  if the key doesn't exist yet add it.
-	int get_index_for_key(const std::string &key)
-	{
-		int rc;
-		auto iter = app_keys2index.find(key);
-		if (iter != app_keys2index.end())
-		{
-			rc = iter->second;
-		}
-		else
-		{
-			app_keys.push_back(key);					// update caches
-			rc = app_keys.size() - 1;
-			app_keys2index.insert(iter, { key, rc });
-		}
-		return rc;
-	}
-
-	std::vector<std::string> app_keys;
-	std::unordered_map<std::string, int> app_keys2index;
-};
-
 
 template <typename visitor_fn>
 void visit_application_state(visitor_fn &visitor, vrstate::application_schema *ss,
-	ApplicationsWrapper wrap, uint32_t app_index, ApplicationsHelper *helper)
+	ApplicationsWrapper wrap, uint32_t app_index, ApplicationsIndexer *helper)
 {
 	visitor.start_group_node("app", app_index);
 
@@ -4169,18 +4268,15 @@ void visit_mime_type_schema(visitor_fn &visitor, vrstate::mime_type_schema *ss,
 
 
 template <typename visitor_fn>
-static void visit_applications_node(visitor_fn &visitor, vrstate::applications_schema *ss, ApplicationsWrapper wrap, ALLOCATOR_DECL)
+static void visit_applications_node(visitor_fn &visitor, vrstate::applications_schema *ss, ApplicationsWrapper wrap, 
+	 AdditionalResourceKeys &tracker_config, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("app", -1);
 
 	if (visitor.visit_openvr())
 	{
 		std::vector<int> active_indexes;
-		if (!ss->applications_helper)
-		{
-			ss->applications_helper = new ApplicationsHelper();
-		}
-		ss->applications_helper->update(&active_indexes, wrap);
+		tracker_config.GetApplicationsIndexer().update(&active_indexes, wrap);
 
 		int *ptr = nullptr;
 		if (active_indexes.size() > 0)
@@ -4194,10 +4290,10 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 		visitor.visit_node(ss->active_application_indexes.item);
 	}
 
-	if (ss->applications_helper && ss->applications_helper->get_num_applications() > (int)ss->applications.size())
+	if (tracker_config.GetApplicationsIndexer().get_num_applications() > (int)ss->applications.size())
 	{
-		ss->applications.reserve(ss->applications_helper->get_num_applications());
-		while ((int)ss->applications.size() < ss->applications_helper->get_num_applications())
+		ss->applications.reserve(tracker_config.GetApplicationsIndexer().get_num_applications());
+		while ((int)ss->applications.size() < tracker_config.GetApplicationsIndexer().get_num_applications())
 		{
 			ss->applications.emplace_back(allocator);
 		}
@@ -4224,7 +4320,7 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 	START_VECTOR(applications);
 	for (int i = 0; i < (int)ss->applications.size(); i++)
 	{
-		visit_application_state(visitor, &ss->applications[i], wrap, i, ss->applications_helper);
+		visit_application_state(visitor, &ss->applications[i], wrap, i, &tracker_config.GetApplicationsIndexer());
 	}
 	END_VECTOR(applications);
 
@@ -4306,7 +4402,7 @@ static void visit_chaperone_node(
 									visitor_fn &visitor, 
 									vrstate::chaperone_schema *ss,
 									ChaperoneWrapper &wrap,
-									const TrackerConfigInternal &tracker_config)
+									const AdditionalResourceKeys &tracker_config)
 {
 	visitor.start_group_node("chaperone_schema", -1);
 		LEAF_SCALAR(calibration_state, wrap.GetCalibrationState());
@@ -4377,7 +4473,7 @@ static void visit_compositor_controller(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_compositor_state(visitor_fn &visitor, 
 									vrstate::compositor_schema *ss, CompositorWrapper wrap, 
-									const TrackerConfigInternal &config, ALLOCATOR_DECL)
+									AdditionalResourceKeys &config, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("compositor_schema", -1);
 	{
@@ -4569,6 +4665,7 @@ static void visit_per_overlay(
 	vrstate::overlay_schema *overlay_state, 
 	OverlayWrapper wrap, 
 	uint32_t overlay_index,
+	AdditionalResourceKeys &config,
 	ALLOCATOR_DECL)
 {
 	vrstate::per_overlay_state *ss = &overlay_state->overlays[overlay_index];
@@ -4576,7 +4673,7 @@ static void visit_per_overlay(
 
 	if (visitor.visit_openvr())
 	{
-		const std::string &key = overlay_state->overlay_helper->get_overlay_key_for_index(overlay_index);
+		const std::string &key = config.GetOverlayIndexer().get_overlay_key_for_index(overlay_index);
 		scalar_result<VROverlayHandle_t, EVROverlayError> handle_result = wrap.GetOverlayHandle(key.c_str());
 		handle = handle_result.val;
 		vector_result<char, vr::EVROverlayError> name(wrap.string_pool);
@@ -4647,122 +4744,10 @@ static void visit_per_overlay(
 }
 
 
-// the idea of the overlay helper is to make it possible to index this thing using integer indexes
-// despite the fact that openvr interfaces index using both overlay handles AND string keys
-//
-class OverlayHelper
-{
-public:
-	// walks through known overlays and updates index set
-	void update(std::vector<int> *active_indexes, OverlayWrapper &ow, const TrackerConfigInternal &config)
-	{
-		update_based_on_tracker_config(active_indexes, ow, config);
-		update_based_on_handles(active_indexes, ow);
-	}
-
-	int get_index_for_key(const char *key)
-	{
-		int ret = -1;
-		std::string skey(key);	// todo blargh, just use char *
-		auto iter = overlay_keys2index.find(skey);
-		if (iter != overlay_keys2index.end())
-		{
-			ret = iter->second;
-		}
-		return ret;
-	}
-	int get_index_for_handle(VROverlayHandle_t h)
-	{
-		int ret = -1;
-		auto iter = overlay_handle2index.find(h);
-		if (iter != overlay_handle2index.end())
-		{
-			ret = iter->second;
-		}
-		return ret;
-	}
-
-	const std::string &get_overlay_key_for_index(const uint32_t overlay_index)
-	{
-		return overlay_keys[overlay_index];
-	}
-
-	int get_num_overlays() const
-	{
-		return overlay_keys.size();
-	}
-
-private:
-	// return an index.  if the key doesn't exist yet add it.
-	int get_overlay_index_for_key(const std::string &key)
-	{	
-		int rc;
-		auto iter = overlay_keys2index.find(key);
-		if (iter != overlay_keys2index.end())
-		{
-			rc = iter->second;
-		}
-		else
-		{
-			overlay_keys.push_back(key);					// update caches
-			rc = overlay_keys.size() - 1;
-			overlay_keys2index.insert(iter, { key, rc });
-		}
-		return rc;
-	}
-
-	void update_based_on_tracker_config(std::vector<int> *active_indexes, OverlayWrapper &ow, const TrackerConfigInternal &config)
-	{
-		for (int i = 0; i < (int)config.m_overlay_keys.size(); i++)
-		{
-			vr::VROverlayHandle_t handle;
-			vr::EVROverlayError e = ow.ovi->FindOverlay(config.m_overlay_keys[i].c_str(), &handle);
-			if (e == vr::VROverlayError_None)
-			{
-				// this overlay is active.
-				// lookup it's index
-				std::string bla(config.m_overlay_keys[i].c_str());				// TODO this copy is stupid
-				int index = get_overlay_index_for_key(bla);
-				active_indexes->push_back(index);
-				overlay_handle2index.insert({ handle, index });
-			}
-		}
-	}
-
-	void update_based_on_handles(std::vector<int> *active_indexes, OverlayWrapper &ow)
-	{
-		// check GetHighQualityOverlay() and GetGamepadFocusOverlay()
-		VROverlayHandle_t harray[2];
-		harray[0] = ow.ovi->GetHighQualityOverlay();
-		harray[1] = ow.ovi->GetGamepadFocusOverlay();
-		for (int i = 0; i < 2; i++)
-		{
-			VROverlayHandle_t h = harray[i];
-			if (h != vr::k_ulOverlayHandleInvalid)
-			{
-				char key[vr::k_unVROverlayMaxKeyLength];
-				vr::VROverlayError e;
-				ow.ovi->GetOverlayKey(h, key, sizeof(key), &e);
-				if (e != vr::k_ulOverlayHandleInvalid)
-				{
-					std::string bla(key);									// This copy is stupid too
-					int index = get_overlay_index_for_key(bla);
-					active_indexes->push_back(index);
-					overlay_handle2index.insert({ h, index });
-				}
-			}
-		}
-	}
-
-	std::vector<std::string> overlay_keys;
-	std::unordered_map<std::string, int> overlay_keys2index;
-	std::unordered_map<VROverlayHandle_t, int> overlay_handle2index;
-};
-
 template <typename visitor_fn>
 static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss, 
 								OverlayWrapper ow, 
-								const TrackerConfigInternal &config,
+								AdditionalResourceKeys &config,
 								ALLOCATOR_DECL)
 {
 	LEAF_SCALAR(gamepad_focus_overlay, ow.GetGamepadFocusOverlay());
@@ -4771,11 +4756,8 @@ static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss
 	if (visitor.visit_openvr())
 	{
 		std::vector<int> active_indexes;
-		if (!ss->overlay_helper)
-		{
-			ss->overlay_helper = new OverlayHelper();
-		}
-		ss->overlay_helper->update(&active_indexes, ow, config);
+		
+		config.GetOverlayIndexer().update(&active_indexes, ow);
 
 		int *ptr = nullptr;
 		if (active_indexes.size() > 0)
@@ -4789,10 +4771,10 @@ static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss
 		visitor.visit_node(ss->active_overlay_indexes.item);
 	}
 
-	if (ss->overlay_helper && ss->overlay_helper->get_num_overlays() > (int)ss->overlays.size())
+	if (config.GetOverlayIndexer().get_num_overlays() > (int)ss->overlays.size())
 	{
-		ss->overlays.reserve(ss->overlay_helper->get_num_overlays());
-		while ((int)ss->overlays.size() < ss->overlay_helper->get_num_overlays())
+		ss->overlays.reserve(config.GetOverlayIndexer().get_num_overlays());
+		while ((int)ss->overlays.size() < config.GetOverlayIndexer().get_num_overlays())
 		{
 			ss->overlays.emplace_back(allocator);
 		}
@@ -4803,7 +4785,7 @@ static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss
 	START_VECTOR(overlays);
 	for (int i = 0; i < (int)ss->overlays.size(); i++)
 	{
-		visit_per_overlay(visitor, ss, ow, i,  allocator);
+		visit_per_overlay(visitor, ss, ow, i, config, allocator);
 	}
 	END_VECTOR(overlays);
 }
@@ -4859,7 +4841,7 @@ static void visit_cameraframetype_schema(visitor_fn &visitor,
 	vrstate::cameraframetype_schema *ss, TrackedCameraWrapper tcw,
 	int device_index, 
 	EVRTrackedCameraFrameType frame_type,
-	const TrackerConfigInternal &config)
+	AdditionalResourceKeys &config)
 {
 	visitor.start_group_node(FrameTypeToGroupName(frame_type),-1);
 
@@ -4879,7 +4861,7 @@ static void visit_cameraframetype_schema(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_per_controller_state(visitor_fn &visitor, 
 		vrstate::trackedcamera_schema::controller_camera_schema *ss, TrackedCameraWrapper tcw, 
-		int device_index, const TrackerConfigInternal &tracker_config, ALLOCATOR_DECL)
+		int device_index, AdditionalResourceKeys &tracker_config, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("controller", device_index);
 	LEAF_SCALAR(has_camera, tcw.HasCamera(device_index));
@@ -4903,7 +4885,7 @@ static void visit_per_controller_state(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_trackedcamera_state(visitor_fn &visitor, 
 									vrstate::trackedcamera_schema *ss, TrackedCameraWrapper tcw, 
-									const TrackerConfigInternal &tracker_config,
+									AdditionalResourceKeys &tracker_config,
 									ALLOCATOR_DECL)
 {
 	visitor.start_group_node("camera", -1);
@@ -4926,7 +4908,7 @@ static void visit_trackedcamera_state(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_per_resource(visitor_fn &visitor,
 	vrstate::resources_schema *ss, ResourcesWrapper &wrap,
-	int i, const TrackerConfigInternal &tracker_config,
+	int i, const AdditionalResourceKeys &tracker_config,
 	ALLOCATOR_DECL)
 {
 	if (visitor.visit_openvr())
@@ -4960,7 +4942,7 @@ static void visit_per_resource(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_resources_state(visitor_fn &visitor,
 	vrstate::resources_schema *ss, ResourcesWrapper &wrap,
-	const TrackerConfigInternal &tracker_config,
+	const AdditionalResourceKeys &tracker_config,
 	ALLOCATOR_DECL)
 {
 	visitor.start_group_node("resources", -1);
@@ -5047,7 +5029,7 @@ struct tracker
 	int non_blocking_update_calls;
 	save_summary save_info;
 	
-	TrackerConfigInternal config;	// save and restore from file.  walk quickly.  future: add and remove
+	AdditionalResourceKeys additional_resource_keys;
 	
 	vrstate m_state;
 	
@@ -5061,7 +5043,7 @@ struct tracker
 		m_frame_number(0),
 		blocking_update_calls(0),
 		non_blocking_update_calls(0),
-		config(c, m_allocator),
+		additional_resource_keys(c, m_allocator),
 		m_state(m_allocator),
 		m_events(m_allocator),
 		m_timestamps(m_allocator)
@@ -5097,12 +5079,12 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 	{
 		twrap t("system_node");
 		visit_system_node(visitor, &s->system_node, interfaces.sysi, system_wrapper, rendermodel_wrapper, 
-							outer_state->config, allocator);
+							outer_state->additional_resource_keys, allocator);
 	}
-
+	
 	{
 		twrap t("applications_node");
-		visit_applications_node(visitor, &s->applications_node, application_wrapper, allocator);
+		visit_applications_node(visitor, &s->applications_node, application_wrapper, outer_state->additional_resource_keys, allocator);
 	}
 	
 	{
@@ -5112,7 +5094,7 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 
 	{
 		twrap t("chaperone_node");
-		visit_chaperone_node(visitor, &s->chaperone_node, chaperone_wrapper, outer_state->config);
+		visit_chaperone_node(visitor, &s->chaperone_node, chaperone_wrapper, outer_state->additional_resource_keys);
 	}
 
 	{
@@ -5122,12 +5104,12 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 
 	{
 		twrap t("compositor_node");
-		visit_compositor_state(visitor, &s->compositor_node, compositor_wrapper, outer_state->config, allocator);
+		visit_compositor_state(visitor, &s->compositor_node, compositor_wrapper, outer_state->additional_resource_keys, allocator);
 	}
 
 	{
 		twrap t("overlay_node");
-		visit_overlay_state(visitor, &s->overlay_node, overlay_wrapper, outer_state->config, allocator);
+		visit_overlay_state(visitor, &s->overlay_node, overlay_wrapper, outer_state->additional_resource_keys, allocator);
 	}
 	
 	{
@@ -5143,12 +5125,12 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 	{
 		twrap t("trackedcamera_node");
 		visit_trackedcamera_state(visitor, &s->trackedcamera_node, tracked_camera_wrapper, 
-										outer_state->config, allocator);
+										outer_state->additional_resource_keys, allocator);
 	}
 
 	{
 		twrap t("resources_node");
-		visit_resources_state(visitor, &s->resources_node, resources_wrapper, outer_state->config, allocator);
+		visit_resources_state(visitor, &s->resources_node, resources_wrapper, outer_state->additional_resource_keys, allocator);
 	}
 
 
@@ -5324,17 +5306,20 @@ struct CursorContext
 		int my_current_frame,
 		vriterator *my_iterators,
 		vrstate *my_state,
+		AdditionalResourceKeys *tracking_set,
 		ALLOCATOR_DECL)
 		:
 		current_frame(my_current_frame),
 		iterators(my_iterators),
 		state(my_state),
+		m_tracking_set(tracking_set),
 		m_allocator(allocator)
 	{}
 
 	int current_frame;
 	vriterator *iterators;
 	vrstate *state;
+	AdditionalResourceKeys *m_tracking_set;
 	ALLOCATOR_TYPE m_allocator;
 };
 
@@ -5653,11 +5638,6 @@ struct vr::HmdMatrix34_t VRSystemCursor::GetRawZeroPoseToStandingAbsoluteTrackin
 	LOG_EXIT_RC(raw2standing->val, "CppStubGetRawZeroPoseToStandingAbsoluteTrackingPose");
 }
 
-//
-// TODO: there is a limitation here that should be assessed. I only record -1 and hmd.
-//       I should capture the rest.  e.g. if there were static anchors now, then 
-//       this is going to get called relative to it.
-//
 uint32_t VRSystemCursor::GetSortedTrackedDeviceIndicesOfClass(
 		vr::ETrackedDeviceClass eTrackedDeviceClass, 
 		vr::TrackedDeviceIndex_t * punTrackedDeviceIndexArray, 
@@ -5674,7 +5654,6 @@ uint32_t VRSystemCursor::GetSortedTrackedDeviceIndicesOfClass(
 	switch (eTrackedDeviceClass)
 	{
 	case TrackedDeviceClass_Invalid:
-		//assert(0);
 		return 0;
 		break;
 	case TrackedDeviceClass_HMD:
@@ -5937,7 +5916,7 @@ const char * VRSystemCursor::GetPropErrorNameFromEnum(vr::ETrackedPropertyError 
 bool VRSystemCursor::PollNextEvent(struct vr::VREvent_t * pEvent, uint32_t uncbVREvent)
 {
 	LOG_ENTRY("CppStubPollNextEvent");
-	assert(0); // to do after writes
+	assert(0); // todo to do after I've figured out read vs write interfaces
 	static bool rc = false;
 	LOG_EXIT_RC(rc, "CppStubPollNextEvent");
 }
@@ -5945,6 +5924,7 @@ bool VRSystemCursor::PollNextEvent(struct vr::VREvent_t * pEvent, uint32_t uncbV
 bool VRSystemCursor::PollNextEventWithPose(vr::ETrackingUniverseOrigin eOrigin, struct vr::VREvent_t * pEvent, uint32_t uncbVREvent, vr::TrackedDevicePose_t * pTrackedDevicePose)
 {
 	LOG_ENTRY("CppStubPollNextEventWithPose");
+	assert(0); // todo to do after I've figured out read vs write interfaces
 	static bool rc = true;
 	LOG_EXIT_RC(rc, "CppStubPollNextEventWithPose");
 }
@@ -6143,14 +6123,11 @@ auto & local_name = local_name ## iter ## .item;
 
 bool VRApplicationsCursor::GetInternalIndexForAppKey(const char *key, int *index_ret)
 {
-	if (state_ref.applications_helper)
+	int index = m_context->m_tracking_set->GetApplicationsIndexer().get_index_for_key(key);
+	if (index != -1)
 	{
-		int index = state_ref.applications_helper->get_index_for_key(key);
-		if (index != -1)
-		{
-			*index_ret = index;
-			return true;
-		}
+		*index_ret = index;
+		return true;
 	}
 	return false;
 }
@@ -6214,7 +6191,7 @@ vr::EVRApplicationError VRApplicationsCursor::GetApplicationKeyByIndex(uint32_t 
 	{
 		int internal_index = active_application_indexes->val[unExternalApplicationIndex];
 		int count;
-		const char *app_key = state_ref.applications_helper->get_key_for_index(internal_index, &count);
+		const char *app_key = m_context->m_tracking_set->GetApplicationsIndexer().get_key_for_index(internal_index, &count);
 		if (util_char_to_return_buf_rc(app_key, count, pchAppKeyBuffer, unAppKeyBufferLen, nullptr))
 		{
 			rc = VRApplicationError_None;
@@ -6412,7 +6389,16 @@ uint32_t VRApplicationsCursor::GetApplicationsThatSupportMimeType(const char * p
 uint32_t VRApplicationsCursor::GetApplicationLaunchArguments(uint32_t unHandle, char * pchArgs, uint32_t unArgs)
 {
 	LOG_ENTRY("CppStubGetApplicationLaunchArguments");
-	assert(0); // todo
+
+	// This is a todo because it relies on the args handle that comes from one of theses events:
+	// struct VREvent_ApplicationLaunch_t
+	//{
+	//	uint32_t pid;
+	//	uint32_t unArgsHandle;
+	//};
+
+
+	assert(0);  // todo after i figure out app launch arguments 
 	uint32_t rc = 2;
 	LOG_EXIT_RC(rc, "CppStubGetApplicationLaunchArguments");
 }
@@ -7231,7 +7217,7 @@ bool VROverlayCursor::IsDashboardVisible()
 vr::EVROverlayError VROverlayCursor::FindOverlay(const char *pchOverlayKey, VROverlayHandle_t * pOverlayHandle)
 {
 	vr::EVROverlayError rc = VROverlayError_UnknownOverlay;
-	OverlayHelper *h = state_ref.overlay_helper;
+	OverlayIndexer *h = &m_context->m_tracking_set->GetOverlayIndexer();
 
 	// regardless of result, pOverlayHandle return value is set 2/6/2017
 	if (pOverlayHandle)
@@ -8041,8 +8027,8 @@ bool VRRenderModelsCursor::GetComponentState(
 		// TODO / Review the following after its up and running and think if there is a better way
 		//
 		// GetComponentState is close to a pure function. its parameteized by, controller state,
-		// and pstate.  the unpure part is that it depends on the component.  Because of these parameters
-		// it is not possible to capture all possible return values.
+		// and pstate.  the unpure part is that it depends on the component.  Because of the pstate and controller state
+		// parameters it is not possible to capture all possible return values.
 		// 
 		// The 'reasonable' thing that is captured is the last active controller
 		// states.  Because that is likely to be of interest.
@@ -8499,7 +8485,6 @@ auto & local_name = local_name ## iter ## .item;
 bool VRResourcesCursor::GetIndexForResourceName(const char *pchResourceName, int *index)
 {
 	bool rc = false;
-	SynchronizeChildVectors();
 	for (int i = 0; i < (int)iter_ref.resources.size(); i++)
 	{
 		SYNC_RESOURCE_STATE(name, resources[i].resource_name);
@@ -8519,7 +8504,6 @@ bool VRResourcesCursor::GetIndexForResourceNameAndDirectory(
 		const char *pchDirectoryName, int *index)
 {
 	bool rc = false;
-	SynchronizeChildVectors();
 	for (int i = 0; i < (int)iter_ref.resources.size(); i++)
 	{
 		SYNC_RESOURCE_STATE(name, resources[i].resource_name);
@@ -8643,7 +8627,7 @@ struct VRCursor
 	VRCursor(tracker *tracker, ALLOCATOR_DECL)
 		:
 		iterators(allocator),
-		m_context(tracker->m_frame_number, &iterators, &tracker->m_state,allocator),
+		m_context(tracker->m_frame_number, &iterators, &tracker->m_state, &tracker->additional_resource_keys, allocator),
 		m_system_cursor(&m_context),
 		m_applications_cursor(&m_context),
 		m_settings_cursor(&m_context),
@@ -8770,8 +8754,7 @@ void capture_vr_overlay_event(vr_state_tracker_t h, vr::VROverlayHandle_t overla
 	update_timestamp(s);
 
 	// helper and overlay must be present or I can't insert the events
-	assert(s->m_state.overlay_node.overlay_helper);
-	int index = s->m_state.overlay_node.overlay_helper->get_index_for_handle(overlay_handle);
+	int index = s->additional_resource_keys.GetOverlayIndexer().get_index_for_handle(overlay_handle);
 	assert(index >= 0);
 	s->m_state.overlay_node.overlays[index].events.item.emplace_front(s->m_frame_number, event_in);
 }

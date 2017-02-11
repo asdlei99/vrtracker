@@ -53,6 +53,35 @@
 //	4. figure out how many MB/sec it uses.
 //		* adding a dumber encoder might be the easiest way to make this smaller and faster - ie no formatting/spaces just csv and no enum 2 string
 
+// tracker concepts/responsibilities
+// Wrappers - wrap the openvr interfaces and export optional<style> interfaces to the caller
+// Visitors functions - walk the graph.  
+// HistoryNode/Presence - detects changes of optional<style> values and logs that history
+// vrschema is the data model which can be instantiated as history notes or cursors into that schema
+
+// TrackerConfigInternal - is the internal ResourcesOfInterest Database
+//	its used by the OverlaysHelper to know which overlays to track
+//  its used by the resources visitors to know which resources to query
+//  its used by all visitors to fill in some of the small config values
+
+// productizations
+//	spy
+//		costs:	add call tracing
+//				add area of interest monitoring
+//
+//	debug:
+//		is a superset of spy.
+//		add breakpoints
+//      add expressions
+//
+//	replay
+//		figure out how the caller can rewind as well
+//		event stepping
+//	
+// money is in process. make this invaluable for a developer
+//
+//
+
 
 // need to pipe in callers areas of interest:
 // caller assets: resources, screenshot handles, overlays, 
@@ -62,27 +91,42 @@
 // its meant to be more of a hint than part of the database - ie don't add dependencies to this
 struct TrackerConfig	// aka Hints
 {
-	float nearz;
+	float nearz;					// intercept: GetProjectionMatrix
 	float farz;
 
-	float distortionU;
+	float distortionU;				// construct: virtual bool ComputeDistortion( EVREye eEye, float fU, float fV, DistortionCoordinates_t *pDistortionCoordinates ) = 0;
 	float distortionV;
 
-	float predicted_seconds_to_photon;
+	float predicted_seconds_to_photon; // intercept: GetDeviceToAbsoluteTrackingPose
 
-	int num_bounds_colors;
-	float collision_bounds_fade_distance;
+	int num_bounds_colors;					// intercept: GetBoundsColor
+	float collision_bounds_fade_distance;	// ""
 
-	uint32_t frame_timing_frames_ago;
-	uint32_t frame_timings_num_frames;
+	uint32_t frame_timing_frames_ago;		// intercept GetFrameTiming
+	uint32_t frame_timings_num_frames;		// intercept GetFrameTimings
 
-	int num_overlays_to_sample;
+	int num_overlays_to_sample;				// intercept 30-50 overlay functions
 	const char **overlay_keys_to_sample;
 
-	int num_resources_to_sample;
+	int num_resources_to_sample;			// intercept GetResourceFullPath and GetResourceFullPath
 	const char **resource_directories_to_sample;
 	const char **resource_filenames_to_sample;
 
+	// application launch arguments
+	//uint32_t unArgsHandle;
+	//ct VREvent_ApplicationLaunch_t
+
+	// devices
+	//struct VkPhysicalDevice_T // intercept virtual uint32_t GetVulkanDeviceExtensionsRequired( VkPhysicalDevice_T *pPhysicalDevice, VR_OUT_STRING() char *pchValue, uint32_t unBufferSize ) = 0;
+	
+	// VRRenderModelsCursor::GetComponentState is using a couple unpredictible inputs pstate and pcontroller state
+
+	// ApplyTransform - 
+	// * write some code to apply transforms
+
+	// compute overlayintersectionresults
+
+	// bigone: figure out how to process events
 
 	void set_default()
 	{
@@ -130,13 +174,20 @@ void get_frame_range(vr_state_tracker_t, int *first_frame, int *last_frame);
 void capture_vr_event(vr_state_tracker_t h, const vr::VREvent_t &event);
 void capture_vr_overlay_event(vr_state_tracker_t h, vr::VROverlayHandle_t overlay_handle, const vr::VREvent_t &event);
 
+
+// explicit tracking adds
+//void add_tracking_on_resource(resource_directory, resource_filename);
+//void add_tracking_on_args(resource_directory, resource_filename);
+
+
+
+
 void dump_vr_history(vr_state_tracker_t h);
 void dump_vr_state(vr_state_tracker_t h, openvr_broker::open_vr_interfaces &interfaces);
 void dump_vr_current(vr_state_tracker_t h, openvr_broker::open_vr_interfaces &interfaces);
 
 void save_vrstate_to_file(vr_state_tracker_t h, const char *filename, bool binary);
 vr_state_tracker_t load_vrstate_from_file(const char *filename);
-
 void destroy_vr_state_tracker(vr_state_tracker_t);
 
 
