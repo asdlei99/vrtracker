@@ -1322,9 +1322,6 @@ struct HistoryVectorNodeOrIterator<T, P, false> : HistoryNode
 };
 
 
-class OverlayIndexer;
-class ApplicationsIndexer;
-
 template <bool bIsIterator>
 struct vrschema
 {
@@ -3556,6 +3553,38 @@ private:
 };
 
 
+class ResourcesIndexer
+{
+public:
+	ResourcesIndexer(const char **resource_filenames, const char **initial_resources_dirs, int num_names)
+	{
+		for (int i = 0; i < num_names; i++)
+		{
+			m_resource_directories.emplace_back(m_resource_directories[i]);
+			m_resource_filenames.emplace_back(m_resource_filenames[i]);
+		}
+	}
+
+	const char *get_filename_for_index(int index, int *fname_size)
+	{
+		*fname_size = m_resource_filenames[index].size() + 1;
+		return m_resource_filenames[index].c_str();
+
+	}
+
+	const char * get_directoryname_for_index(int index, int *dname_size)
+	{
+		*dname_size = m_resource_directories[index].size() + 1;
+		return m_resource_directories[index].c_str();
+	}
+
+	int get_num_resources() {
+		return m_resource_filenames.size();
+	}
+
+	std::vector<std::string> m_resource_directories;
+	std::vector<std::string> m_resource_filenames;
+};
 
 // the idea of the overlay helper is to make it possible to index this thing using integer indexes
 // despite the fact that openvr interfaces index using both overlay handles AND string keys
@@ -3655,12 +3684,12 @@ struct AdditionalResourceKeys
 {
 	OverlayIndexer	&GetOverlayIndexer()			{ return m_overlay_indexer; }
 	ApplicationsIndexer &GetApplicationsIndexer()	{ return m_applications_indexer; }
+	ResourcesIndexer &GetResourcesIndexer()			{ return m_resources_indexer; }
+
 
 	AdditionalResourceKeys(const TrackerConfig &c, ALLOCATOR_DECL)
 		:	m_overlay_indexer(c.overlay_keys_to_sample, c.num_overlays_to_sample),
-			m_resource_directories(allocator),
-			m_resource_filenames(allocator)
-			
+			m_resources_indexer(c.resource_filenames_to_sample, c.resource_directories_to_sample, c.num_resources_to_sample)
 	{
 		nearz = c.nearz;
 		farz = c.farz;
@@ -3671,18 +3700,6 @@ struct AdditionalResourceKeys
 		collision_bounds_fade_distance = c.collision_bounds_fade_distance;
 		frame_timing_frames_ago = c.frame_timing_frames_ago;
 		frame_timings_num_frames = c.frame_timings_num_frames;
-
-		for (int i = 0; i < c.num_resources_to_sample; i++)
-		{
-			m_resource_directories.emplace_back(allocator);
-			m_resource_filenames.emplace_back(allocator);
-		}
-
-		for (int i = 0; i < c.num_resources_to_sample; i++)
-		{
-			m_resource_directories[i].assign(c.resource_directories_to_sample[i]);
-			m_resource_filenames[i].assign(c.resource_filenames_to_sample[i]);
-		}
 	}
 
 	float nearz;
@@ -3701,9 +3718,7 @@ struct AdditionalResourceKeys
 
 	OverlayIndexer m_overlay_indexer;
 	ApplicationsIndexer m_applications_indexer;
-
-	std::vector<std::basic_string<char, std::char_traits<char>, ALLOCATOR_TYPE>, ALLOCATOR_TYPE> m_resource_directories;
-	std::vector<std::basic_string<char, std::char_traits<char>, ALLOCATOR_TYPE>, ALLOCATOR_TYPE> m_resource_filenames;
+	ResourcesIndexer m_resources_indexer;
 };
 
 
@@ -4908,21 +4923,22 @@ static void visit_trackedcamera_state(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_per_resource(visitor_fn &visitor,
 	vrstate::resources_schema *ss, ResourcesWrapper &wrap,
-	int i, const AdditionalResourceKeys &tracker_config,
+	int i, AdditionalResourceKeys &tracker_config,
 	ALLOCATOR_DECL)
 {
 	if (visitor.visit_openvr())
 	{
-		visitor.visit_node(ss->resources[i].resource_name.item, tracker_config.m_resource_filenames[i].c_str(), 
-						tracker_config.m_resource_filenames[i].size()+1);
-
-		visitor.visit_node(ss->resources[i].resource_directory.item, tracker_config.m_resource_directories[i].c_str(),
-			tracker_config.m_resource_directories[i].size() + 1);
+		int fname_size;
+		const char *fname = tracker_config.GetResourcesIndexer().get_filename_for_index(i, &fname_size);
+		int dname_size;
+		const char *dname = tracker_config.GetResourcesIndexer().get_directoryname_for_index(i, &dname_size);
+		visitor.visit_node(ss->resources[i].resource_name.item, fname, fname_size);
+		visitor.visit_node(ss->resources[i].resource_directory.item, dname, dname_size);
 
 		vector_result<char> full_path(wrap.string_pool);
 		wrap.GetFullPath(
-			tracker_config.m_resource_filenames[i].c_str(),
-			tracker_config.m_resource_directories[i].c_str(),
+			fname,
+			dname,
 			&full_path);
 
 		visitor.visit_node(ss->resources[i].resource_full_path.item, full_path.s.buf(), full_path.count);
@@ -4942,15 +4958,15 @@ static void visit_per_resource(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_resources_state(visitor_fn &visitor,
 	vrstate::resources_schema *ss, ResourcesWrapper &wrap,
-	const AdditionalResourceKeys &tracker_config,
+	AdditionalResourceKeys &tracker_config,
 	ALLOCATOR_DECL)
 {
 	visitor.start_group_node("resources", -1);
 
-	if ((int)ss->resources.size() < tracker_config.m_resource_filenames.size())
+	if ((int)ss->resources.size() < tracker_config.GetResourcesIndexer().get_num_resources())
 	{
-		ss->resources.reserve(tracker_config.m_resource_filenames.size());
-		while ((int)ss->resources.size() < tracker_config.m_resource_filenames.size())
+		ss->resources.reserve(tracker_config.GetResourcesIndexer().get_num_resources());
+		while ((int)ss->resources.size() < tracker_config.GetResourcesIndexer().get_num_resources())
 		{
 			ss->resources.emplace_back(allocator);
 		}

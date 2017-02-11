@@ -24,7 +24,7 @@ struct InterfaceAuditor
 {
 	void ReportFailure(const char *string, const char *file, int line)
 	{
-		dprintf("%s %d %d\n", string, file, line);
+		dprintf("%s %s %d\n", string, file, line);
 	}
 
 	void compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
