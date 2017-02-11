@@ -3922,6 +3922,8 @@ static void visit_eye_state(visitor_fn &visitor,
 		visit_hidden_mesh(visitor, &ss->hidden_meshes[i], eEye, EHiddenAreaMeshType(i), sysi, wrap);
 	}
 	END_VECTOR(hidden_meshes);
+
+	visitor.end_group_node("eye", eEye);
 }
           
 template <typename visitor_fn>
@@ -4233,13 +4235,12 @@ template <typename visitor_fn>
 void visit_application_state(visitor_fn &visitor, vrstate::application_schema *ss,
 	ApplicationsWrapper wrap, uint32_t app_index, ApplicationsIndexer *helper)
 {
-	visitor.start_group_node("app", app_index);
+	visitor.start_group_node("app_state", app_index);
 
-	const char *app_key;
+	int count;
+	const char *app_key = helper->get_key_for_index(app_index, &count);
 	if (visitor.visit_openvr())
 	{
-		int count;
-		app_key = helper->get_key_for_index(app_index, &count);
 		visitor.visit_node(ss->application_key.item, app_key, count);
 		scalar<uint32_t> process_id = wrap.GetApplicationProcessId(app_key);
 		LEAF_SCALAR(process_id, process_id);
@@ -4260,7 +4261,7 @@ void visit_application_state(visitor_fn &visitor, vrstate::application_schema *s
 	visit_properties(visitor, ss->bool_props, wrap, app_key);
 	visit_properties(visitor, ss->uint64_props, wrap, app_key);
 
-	visitor.end_group_node("applications_node", app_index);
+	visitor.end_group_node("app_state", app_index);
 }
 
 template <typename visitor_fn>
@@ -4683,6 +4684,8 @@ static void visit_per_overlay(
 	AdditionalResourceKeys &config,
 	ALLOCATOR_DECL)
 {
+	visitor.start_group_node("overlay", overlay_index);
+
 	vrstate::per_overlay_state *ss = &overlay_state->overlays[overlay_index];
 	vr::VROverlayHandle_t handle = 0;
 
@@ -4756,6 +4759,8 @@ static void visit_per_overlay(
 		visitor.visit_node(ss->overlay_transform_component_relative_device_index.item);
 		visitor.visit_node(ss->overlay_transform_component_relative_name.item);
 	}
+
+	visitor.end_group_node("overlay", overlay_index);
 }
 
 
@@ -4765,6 +4770,8 @@ static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss
 								AdditionalResourceKeys &config,
 								ALLOCATOR_DECL)
 {
+	visitor.start_group_node("overlays", -1);
+
 	LEAF_SCALAR(gamepad_focus_overlay, ow.GetGamepadFocusOverlay());
 	LEAF_SCALAR(primary_dashboard_device, ow.GetPrimaryDashboardDevice());
 
@@ -4803,6 +4810,8 @@ static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss
 		visit_per_overlay(visitor, ss, ow, i, config, allocator);
 	}
 	END_VECTOR(overlays);
+
+	visitor.end_group_node("overlays", -1);
 }
 
 template <typename visitor_fn>
@@ -4926,6 +4935,7 @@ static void visit_per_resource(visitor_fn &visitor,
 	int i, AdditionalResourceKeys &tracker_config,
 	ALLOCATOR_DECL)
 {
+	visitor.start_group_node("resource", i);
 	if (visitor.visit_openvr())
 	{
 		int fname_size;
@@ -4953,6 +4963,7 @@ static void visit_per_resource(visitor_fn &visitor,
 		visitor.visit_node(ss->resources[i].resource_full_path.item);
 		visitor.visit_node(ss->resources[i].resource_data.item);
 	}
+	visitor.end_group_node("resource", i);
 }
 
 template <typename visitor_fn>
@@ -4978,6 +4989,8 @@ static void visit_resources_state(visitor_fn &visitor,
 		visit_per_resource(visitor, ss, wrap, i, tracker_config, allocator);
 	}
 	END_VECTOR(resources);
+
+	visitor.end_group_node("resources", -1);
 }
 
 static void encode_events(EncodeStream *stream, const std::forward_list<FrameNumberedEvent, ALLOCATOR_TYPE> &events)

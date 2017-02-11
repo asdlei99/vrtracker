@@ -31,6 +31,10 @@
 // I think the entire vr state can be made flat
 //
 
+//
+// passthru monitor
+// 
+
 // how to test such a system
 //
 // a monitor that watches transactions and marks desyncs: 

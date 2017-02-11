@@ -6,6 +6,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "trackerlib", "tracker.vcxproj", "{D1DF850E-E6F1-465F-A98A-AF04A0D55AD1}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "profiler", "..\..\profiler\profiler\profiler.vcxproj", "{19DA1843-D64B-406B-8156-19A0CB8E7AF4}"
+	ProjectSection(ProjectDependencies) = postProject
+		{D1DF850E-E6F1-465F-A98A-AF04A0D55AD1} = {D1DF850E-E6F1-465F-A98A-AF04A0D55AD1}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "brokerdll", "..\..\brokerdll\brokerdll\brokerdll.vcxproj", "{C1F9BA71-2A0E-43EA-9CA4-DCE82F76FFF7}"
 EndProject

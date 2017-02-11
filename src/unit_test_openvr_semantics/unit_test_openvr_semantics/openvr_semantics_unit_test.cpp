@@ -4,12 +4,10 @@
 #include <vrdelta.h>
 #include <windows.h>
 #include <assert.h>
-
 #include <vector>
 #include <chrono>
 #include <thread>
 #include "openvr_softcompare.h"
-
 #include "openvr_broker.h"
 #include "dprintf.h"
 
@@ -74,8 +72,6 @@ struct InterfaceAuditor
 			interactive_component_state_test(ia, ib);
 		}
 	}
-
-
 };
 
 #define ASSERT(cond) \
