@@ -3560,8 +3560,8 @@ public:
 	{
 		for (int i = 0; i < num_names; i++)
 		{
-			m_resource_directories.emplace_back(m_resource_directories[i]);
-			m_resource_filenames.emplace_back(m_resource_filenames[i]);
+			m_resource_directories.emplace_back(initial_resources_dirs[i]);
+			m_resource_filenames.emplace_back(resource_filenames[i]);
 		}
 	}
 
@@ -8520,6 +8520,7 @@ bool VRResourcesCursor::GetIndexForResourceNameAndDirectory(
 		const char *pchDirectoryName, int *index)
 {
 	bool rc = false;
+	SynchronizeChildVectors(); // dont erase this since this is a lookup 
 	for (int i = 0; i < (int)iter_ref.resources.size(); i++)
 	{
 		SYNC_RESOURCE_STATE(name, resources[i].resource_name);
