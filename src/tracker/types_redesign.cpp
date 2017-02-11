@@ -134,7 +134,6 @@ namespace openvr_string
 	}
 };
 
-
 // the following type traits for enums used by the history logic to detect if an error code implies that the value
 // part is valid
 template <typename T> 
@@ -852,7 +851,6 @@ private:
 	int string_pool_blocking_calls;
 	int string_pool_non_blocking_calls;
 };
-
 
 template <typename T>
 struct TMP 
@@ -5039,8 +5037,6 @@ struct save_summary
 	int num_frames;
 	char date_string[64];
 };
-
-
 
 //
 // the root of all vr state
