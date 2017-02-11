@@ -228,107 +228,230 @@ static void indented_output(std::ostream &ofs, std::string s, int indent_level)
 
 namespace vrtypes
 {
+struct slab
+{
+	static int slab_num_slabs;
+	static int slab_total_slab_page_allocs;
+	static int slab_total_slab_page_frees;
+	static int slab_num_alloc_calls;
+
+	std::forward_list<char *> pages;
+	int		page_size;
+	int64_t current_page_pos;
+
+	slab(int page_size_in)
+		: page_size(page_size_in)
+	{
+		slab_num_slabs++;
+		current_page_pos = 0;
+		slab_alloc(0);
+	}
+
+	~slab()
+	{
+		for (auto iter = pages.begin(); iter != pages.end(); iter++)
+		{
+			char *mem = *iter;
+			free(mem);
+			slab_total_slab_page_frees += 1;
+		}
+		pages.clear();
+		slab_num_slabs--;
+	}
+
+	void *slab_alloc(size_t size)
+	{
+		assert((int)size < page_size);
+		size = (size + 3) & ~0x3;
+		slab_num_alloc_calls += 1;
+
+		// critical start
+		if (pages.empty() || (int)size + current_page_pos > page_size)
+		{
+			current_page_pos = 0;
+			slab_total_slab_page_allocs += 1;
+			char *page = (char *)malloc(page_size);
+			pages.push_front(page);
+		}
+
+		char *ret = pages.front();
+		ret += current_page_pos;
+		current_page_pos += size;
+		// critical end
+
+		return ret;
+	}
+};
+
+
+struct slab_allocator_base
+{
+	static int slab_allocators_constructed;
+	static int slab_allocators_destroyed;
+	static int slab_allocators_leaks;
+};
+
+template <class T>
+struct slab_allocator : slab_allocator_base {
+public:
+	typedef T		   value_type;
+	typedef T*         pointer;
+	typedef const T&   const_reference;
+
+	slab* m_slab;
+
+	// stl likes to make these evil ones for some reason
+	slab_allocator()
+		: m_slab(nullptr)
+	{
+		slab_allocators_constructed++;
+	}
+
+	slab_allocator(slab *slab)
+	{
+		m_slab = slab;
+		slab_allocators_constructed++;
+	}
+
+	slab_allocator(const slab_allocator &rhs)
+	{
+		m_slab = rhs.m_slab;
+		slab_allocators_constructed++;
+	}
+
+	template<typename X, typename Y>
+	struct rebind { using other = slab_allocator<T>; };
+
+	~slab_allocator()
+	{
+		slab_allocators_destroyed++;
+	}
+
+	template <class U> slab_allocator(const slab_allocator<U>& other)
+	{
+		m_slab = other.m_slab;
+		slab_allocators_constructed++;
+	}
+
+	T* allocate(std::size_t n)
+	{
+		T* p = (T*)m_slab->slab_alloc(n * sizeof(T));
+		return (T*)p;
+	}
+	void deallocate(T* p, std::size_t n)
+	{
+		slab_allocators_leaks++;
+	}
+};
+}
+
+#define ALLOCATOR_TYPE vrtypes::slab_allocator<char>
+#define ALLOCATOR_DECL ALLOCATOR_TYPE &allocator
+#define INIT(var_name)					var_name( #var_name, allocator)
+
+namespace vrtypes
+{
 	template <typename T, typename P, typename AllocatorT = ALLOCATOR_TYPE>
-		struct history_entry_base
+	struct history_entry_base
+	{
+		history_entry_base() = default;
+
+		template<typename... Args>
+		history_entry_base(int frame_number_in, P presence_in, Args&&... args)
+			: presence(presence_in),
+			frame_number(frame_number_in),
+			val(std::forward<Args>(args)...)
 		{
-			history_entry_base() = default;	
+		}
+		history_entry_base(int frame_number_in, P presence_in, const T& val_in)
+			:
+			presence(presence_in),
+			frame_number(frame_number_in),
+			val(val_in)
+		{}
 
-			template<typename... Args>
-			history_entry_base(int frame_number_in, P presence_in, Args&&... args)
-				: presence(presence_in),
-				frame_number(frame_number_in),
-				val(std::forward<Args>(args)...)
-			{
-			}
-			history_entry_base(int frame_number_in, P presence_in, const T& val_in)
-				:
-				presence(presence_in),
-				frame_number(frame_number_in),
-				val(val_in)
-			{}
-
-			bool is_present() const
-			{
-				return (PresenceValue<P>::is_present == presence); 
-			}
-
-			std::string GetChangeDescriptionString()
-			{
-				using namespace openvr_string;
-				using namespace std;
-				std::string s;
-				
-				if (PresenceValue<P>::is_present == presence)
-				{
-					s += to_string(val);
-				}
-				else
-				{
-					s += to_string(presence) + "\n";
-				}
-				return s;
-			}
-
-			void dump(std::ostream &ofs, int indent_level)
-			{
-				using namespace openvr_string;
-				using namespace std;
-				indented_output(ofs, std::string("frame_number:") + to_string(frame_number) + "\n", indent_level);
-				indented_output(ofs, std::string("presence:") + to_string(presence) + "\n", indent_level);
-				if (PresenceValue<P>::is_present == presence)
-				{
-					indented_output(ofs, to_string(val), indent_level);
-				}
-				ofs << "\n";
-			}
-			int frame_number;
-			P presence;
-			T val;
-		};
-
-		template <typename T, typename AllocatorT>
-		struct history_entry_base <T, AlwaysAndForever, AllocatorT>
+		bool is_present() const
 		{
-			history_entry_base() = default;
+			return (PresenceValue<P>::is_present == presence);
+		}
 
-			template<typename... Args>
-			history_entry_base(int frame_number_in, Args&&... args)
-				: 
-				frame_number(frame_number_in),
-				val(std::forward<Args>(args)...)
-			{}
+		std::string GetChangeDescriptionString()
+		{
+			using namespace openvr_string;
+			using namespace std;
+			std::string s;
 
-			history_entry_base(int frame_number_in, const T& val_in)
-				:
-				frame_number(frame_number_in),
-				val(val_in)
-			{}
-
-			bool is_present() const
+			if (PresenceValue<P>::is_present == presence)
 			{
-				return true;
-			}
-
-			std::string GetChangeDescriptionString()
-			{
-				using namespace openvr_string;
-				using namespace std;
-				std::string s;
 				s += to_string(val);
-				return s;
 			}
-
-			void dump(std::ostream &ofs, int indent_level)
+			else
 			{
-				using namespace openvr_string;
-				using namespace std;
-				indented_output(ofs, std::string("frame_number:") + to_string(frame_number) + "\n", indent_level);
-				indented_output(ofs, to_string(val), indent_level);
-				ofs << "\n";
+				s += to_string(presence) + "\n";
 			}
-			int frame_number;
-			T val;
-		};
+			return s;
+		}
+
+		void dump(std::ostream &ofs, int indent_level)
+		{
+			using namespace openvr_string;
+			using namespace std;
+			indented_output(ofs, std::string("frame_number:") + to_string(frame_number) + "\n", indent_level);
+			indented_output(ofs, std::string("presence:") + to_string(presence) + "\n", indent_level);
+			if (PresenceValue<P>::is_present == presence)
+			{
+				indented_output(ofs, to_string(val), indent_level);
+			}
+			ofs << "\n";
+		}
+		int frame_number;
+		P presence;
+		T val;
+	};
+
+	template <typename T, typename AllocatorT>
+	struct history_entry_base <T, AlwaysAndForever, AllocatorT>
+	{
+		history_entry_base() = default;
+
+		template<typename... Args>
+		history_entry_base(int frame_number_in, Args&&... args)
+			:
+			frame_number(frame_number_in),
+			val(std::forward<Args>(args)...)
+		{}
+
+		history_entry_base(int frame_number_in, const T& val_in)
+			:
+			frame_number(frame_number_in),
+			val(val_in)
+		{}
+
+		bool is_present() const
+		{
+			return true;
+		}
+
+		std::string GetChangeDescriptionString()
+		{
+			using namespace openvr_string;
+			using namespace std;
+			std::string s;
+			s += to_string(val);
+			return s;
+		}
+
+		void dump(std::ostream &ofs, int indent_level)
+		{
+			using namespace openvr_string;
+			using namespace std;
+			indented_output(ofs, std::string("frame_number:") + to_string(frame_number) + "\n", indent_level);
+			indented_output(ofs, to_string(val), indent_level);
+			ofs << "\n";
+		}
+		int frame_number;
+		T val;
+	};
 
 	// represent the history of a value
 	// 
@@ -340,13 +463,13 @@ namespace vrtypes
 
 		typedef typename std::forward_list<history_entry, AllocatorT>::iterator iter_type;
 
-		history_base(const AllocatorT& alloc)	: 	name_in(nullptr), values(alloc)	
+		history_base(const AllocatorT& alloc) : name(nullptr), values(alloc)
 		{}
 
-		history_base(const char* name_in, const AllocatorT& alloc)	
+		history_base(const char* name_in, const AllocatorT& alloc)
 			: name(name_in), values(alloc)
 		{}
-			
+
 		bool empty() const { return values.empty(); }
 
 		bool more_than_2_values() const
@@ -362,7 +485,7 @@ namespace vrtypes
 			}
 			return false;
 		}
-		const history_entry & front() const { return values.front();  }
+		const history_entry & front() const { return values.front(); }
 		const T& latest() const
 		{
 			return values.front().val;
@@ -386,11 +509,11 @@ namespace vrtypes
 	struct history : public history_base<T, P, AllocatorT>
 	{
 
-		history(const AllocatorT& alloc) : history_base(alloc)
+		history(const AllocatorT& alloc) : history_base<T,P,AllocatorT>(alloc)
 		{}
 
 		history(const char* name_in, const AllocatorT& alloc)
-			: history_base(name_in, alloc)
+			: history_base<T, P, AllocatorT>(name_in, alloc)
 		{}
 
 		const P& latest_P() const
@@ -403,17 +526,18 @@ namespace vrtypes
 		{
 			values.emplace_front(frame_number, presence, std::forward<Args>(args)...);
 		}
+
 	};
 
 	// history with no Presence values
 	template <typename T, typename AllocatorT>
 	struct history<T, AlwaysAndForever, AllocatorT> : public history_base<T, AlwaysAndForever, AllocatorT>
 	{
-		history(const AllocatorT& alloc) : history_base(alloc)
+		history(const AllocatorT& alloc) : history_base<T, AlwaysAndForever, AllocatorT>(alloc)
 		{}
 
 		history(const char* name_in, const AllocatorT& alloc)
-			: history_base(name_in, alloc)
+			: history_base<T, AlwaysAndForever, AllocatorT>(name_in, alloc)
 		{}
 
 		template<typename... Args>
@@ -421,123 +545,11 @@ namespace vrtypes
 		{
 			values.emplace_front(frame_number, std::forward<Args>(args)...);
 		}
-	};
 
-	struct slab
-	{
-		static int slab_num_slabs;
-		static int slab_total_slab_page_allocs;
-		static int slab_total_slab_page_frees;
-		static int slab_num_alloc_calls;
-
-		std::forward_list<char *> pages;
-		int		page_size;
-		int64_t current_page_pos;
-
-		slab(int page_size_in)
-			: page_size(page_size_in)
-		{
-			slab_num_slabs++;
-			current_page_pos = 0;
-			slab_alloc(0);
-		}
-
-		~slab()
-		{
-			for (auto iter = pages.begin(); iter != pages.end(); iter++)
-			{
-				char *mem = *iter;
-				free(mem);
-				slab_total_slab_page_frees += 1;
-			}
-			pages.clear();
-			slab_num_slabs--;
-		}
-
-		void *slab_alloc(size_t size)
-		{
-			assert((int)size < page_size);
-			size = (size + 3) & ~0x3;
-			slab_num_alloc_calls += 1;
-
-			// critical start
-			if (pages.empty() || (int)size + current_page_pos > page_size)
-			{
-				current_page_pos = 0;
-				slab_total_slab_page_allocs += 1;
-				char *page = (char *)malloc(page_size);
-				pages.push_front(page);
-			}
-					
-			char *ret = pages.front();
-			ret += current_page_pos;
-			current_page_pos += size;
-			// critical end
-
-			return ret;
-		}
-	};
-
-	struct slab_allocator_base
-	{
-		static int slab_allocators_constructed;
-		static int slab_allocators_destroyed;
-		static int slab_allocators_leaks;
-	};
-
-	template <class T>
-	struct slab_allocator : slab_allocator_base {
-	public:
-		typedef T		   value_type;
-		typedef T*         pointer;
-		typedef const T&   const_reference;
-
-		slab* m_slab;
-
-		// stl likes to make these evil ones for some reason
-		slab_allocator()
-			: m_slab(nullptr)
-		{
-			slab_allocators_constructed++;
-		}
-
-		slab_allocator(slab *slab)
-		{
-			m_slab = slab;
-			slab_allocators_constructed++;
-		}
-
-		slab_allocator(const slab_allocator &rhs)
-		{
-			m_slab = rhs.m_slab;
-			slab_allocators_constructed++;
-		}
-
-		template<typename X, typename Y>
-		struct rebind { using other = slab_allocator<T>; };
-
-		~slab_allocator()
-		{
-			slab_allocators_destroyed++;
-		}
-
-		template <class U> slab_allocator(const slab_allocator<U>& other)
-		{
-			m_slab = other.m_slab;
-			slab_allocators_constructed++;
-		}
-
-		T* allocate(std::size_t n)
-		{
-			T* p = (T*)m_slab->slab_alloc(n * sizeof(T));
-			return (T*)p;
-		}
-		void deallocate(T* p, std::size_t n)
-		{
-			slab_allocators_leaks++;
-		}
 	};
 }
+	
+
 
 template <typename T, typename P, typename allocatorT>
 struct serializer_base

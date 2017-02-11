@@ -49,7 +49,7 @@ struct EncodeStream
 template <typename T>
 static void encode(T v, EncodeStream &e);
 
-#define ENCODE(type_name) template <> static void encode<type_name>(type_name v, EncodeStream &e) { e.memcpy_out_to_stream(&v, sizeof(v)); }
+#define ENCODE(type_name) template <> void encode<type_name>(type_name v, EncodeStream &e) { e.memcpy_out_to_stream(&v, sizeof(v)); }
 
 ENCODE(unsigned int);
 ENCODE(int);
@@ -64,7 +64,7 @@ ENCODE(uint64_t);
 ENCODE(vr::EVROverlayError);
 
 template <>
-static void encode<const char *>(const char *v, EncodeStream &e)
+void encode<const char *>(const char *v, EncodeStream &e)
 {
 	int size = (int)strlen(v) + 1;
 	encode(size, e);
@@ -72,13 +72,13 @@ static void encode<const char *>(const char *v, EncodeStream &e)
 }
 
 template <typename T>
-static void decode(T &v, EncodeStream &e)
+void decode(T &v, EncodeStream &e)
 {
 	e.memcpy_from_stream(&v, sizeof(v));
 }
 
 template <typename U>
-static void decode(const char *&str, EncodeStream &e, U allocator)
+void decode(const char *&str, EncodeStream &e, U allocator)
 {
 	// read the size of the string
 	int size;

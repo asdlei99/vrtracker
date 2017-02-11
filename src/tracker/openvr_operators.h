@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include <openvr.h>
-#include <memory>
+//#include <memory>
 #include <string>
 
 
