@@ -1,6 +1,4 @@
-// openvr_semantics_unit_test.cpp : Defines the entry point for the console application.
-//
-
+#include "InterfaceAuditor.h"
 #include <vrdelta.h>
 #include <windows.h>
 #include <assert.h>
@@ -11,202 +9,37 @@
 #include "openvr_broker.h"
 #include "dprintf.h"
 
-// passthru with dirty sync
-// cursor with latest mode
-// together these would give a close approximation to the behaviour of the raw interface
-// and then would be easier to cross check
-
-struct OpenVRInterfaceUnderTest;
-
-struct InterfaceAuditor
+void InterfaceAuditor::ReportFailure(const char *string, const char *file, int line)
 {
-	void ReportFailure(const char *string, const char *file, int line)
+	dprintf("%s %s %d\n", string, file, line);
+}
+
+void InterfaceAuditor::AuditInterfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c, bool do_interactive)
+{
+	compare_sysi_interfaces(ia, ib, c);
+	compare_appi_interfaces(ia, ib, c);
+	compare_seti_interfaces(ia, ib, c);
+	compare_chapi_interfaces(ia, ib, c);
+	compare_chapsi_interfaces(ia, ib);
+	compare_taci_interfaces(ia, ib, c);
+	compare_remi_strange_interfaces(ia, ib);
+	compare_compi_interfaces(ia, ib, c);
+	compare_ovi_interfaces(ia, ib, c);
+	compare_exdi_interfaces(ia, ib, c);
+	compare_screeni_interfaces(ia, ib, c);
+	compare_resi_interfaces(ia, ib, c);
+
+	if (do_interactive)
 	{
-		dprintf("%s %s %d\n", string, file, line);
+		interactive_component_state_test(ia, ib);
 	}
-
-	void compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-	void compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-	void compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-	void compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-	void compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
-	void compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-	void compare_remi_strange_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
-	void compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-	void compare_exdi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-	void compare_taci_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-	void compare_screeni_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-	void compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c);
-	void interactive_component_state_test(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib);
-
-	void compare_per_overlay_handles(vr::VROverlayHandle_t overlay_handle_a,
-		vr::VROverlayHandle_t overlay_handle_b,
-		openvr_broker::open_vr_interfaces *a,
-		openvr_broker::open_vr_interfaces *b);
-
-	void process_overlay_events_on_handles(
-		OpenVRInterfaceUnderTest *ia, std::vector<vr::VROverlayHandle_t> *h,
-		OpenVRInterfaceUnderTest *ib, std::vector<vr::VROverlayHandle_t> *h2);
-
-	void compare_apps(vr::IVRApplications *a_appi, vr::IVRApplications *b_appi);
-
-	void AuditInterfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c,
-							bool do_interactive = false)
-	{
-		compare_sysi_interfaces(ia, ib, c);
-		compare_appi_interfaces(ia, ib, c);
-		compare_seti_interfaces(ia, ib, c);
-		compare_chapi_interfaces(ia, ib, c);
-		compare_chapsi_interfaces(ia, ib);
-		compare_taci_interfaces(ia, ib, c);
-		compare_remi_strange_interfaces(ia, ib);
-		compare_compi_interfaces(ia, ib, c);
-		compare_ovi_interfaces(ia, ib, c);
-		compare_exdi_interfaces(ia, ib, c);
-		compare_taci_interfaces(ia, ib, c);
-		compare_screeni_interfaces(ia, ib, c);
-		compare_resi_interfaces(ia, ib, c);
-	
-		if (do_interactive)
-		{
-			interactive_component_state_test(ia, ib);
-		}
-	}
-};
+}
 
 #define ASSERT(cond) \
 if (!(cond)) \
 { \
 ReportFailure(#cond, __FILE__, __LINE__); \
 } 
-
-
-// for testing/abstraction purposes, package the interfaces in something with
-// an Refres method.  This way I can have the 'tracker' based interfaces update their cursor positions
-// when writes are being made.
-
-struct OpenVRInterfaceUnderTest 
-{
-	virtual openvr_broker::open_vr_interfaces &Get() = 0;
-	virtual void Refresh() {};
-
-	virtual void PushOverlayEvent(vr::VROverlayHandle_t ulOverlayHandle, vr::VREvent_t *pEvent) {}
-
-};
-
-struct RawInterface : public OpenVRInterfaceUnderTest
-{
-	RawInterface()
-		: m_init(false)
-	{
-	}
-	
-	void Init()
-	{
-		m_init = true;
-		char *error;
-		if (!openvr_broker::acquire_interfaces("raw", &m_raw_interface, &error))
-		{
-			dprintf("error %s\n", error);
-			exit(0);
-		}
-	}
-
-
-	virtual openvr_broker::open_vr_interfaces &Get() override { return m_raw_interface;  }
-
-private:
-	bool m_init;
-	openvr_broker::open_vr_interfaces m_raw_interface;
-};
-
-struct CursorBasedInterface : public OpenVRInterfaceUnderTest
-{
-	CursorBasedInterface() 
-		: m_init(false)
-	{}
-
-	~CursorBasedInterface()
-	{
-		if (m_init)
-		{
-		}
-	}
-
-	openvr_broker::open_vr_interfaces &Get() override { return m_cursor_interfaces;  }
-
-	void Init(const TrackerConfig &c, const openvr_broker::open_vr_interfaces &raw_interfaces)
-	{
-		m_init = true;
-		m_tracker = create_vr_state_tracker(c);
-		m_raw_interfaces = raw_interfaces;
-		capture_vr_state(m_tracker, m_raw_interfaces);
-
-		int start_frame; int end_frame;
-		m_cursor = create_cursor(m_tracker);
-		m_cursor_interfaces = get_cursor_interfaces(m_cursor);
-		get_frame_range(m_tracker, &start_frame, &end_frame);
-		set_cursor_frame(m_cursor, end_frame);
-	}
-
-	virtual void PushOverlayEvent(vr::VROverlayHandle_t ulOverlayHandle, vr::VREvent_t *pEvent) override
-	{
-		capture_vr_overlay_event(m_tracker, ulOverlayHandle, *pEvent);
-	}
-
-	virtual void Refresh() override
-	{
-		capture_vr_state(m_tracker, m_raw_interfaces);
-
-		// move cursor
-		int start_frame; int end_frame;
-		get_frame_range(m_tracker, &start_frame, &end_frame);
-		set_cursor_frame(m_cursor, end_frame);
-	}
-private:
-	bool m_init;
-	vr_state_tracker_t m_tracker;
-	vr_cursor_t m_cursor;
-	openvr_broker::open_vr_interfaces m_raw_interfaces;
-	openvr_broker::open_vr_interfaces m_cursor_interfaces;
-};
-
-const char *overlay_keys[] = {
-	 "a","b","c"
-};
-
-const char *resource_directories[] =
-{
-	"icons"
-};
-
-const char *resource_names[] = 
-{
-	"base_status_error.png"
-};
-
-int main()
-{
-	TrackerConfig c;
-	c.set_default();
-	c.num_overlays_to_sample = sizeof(overlay_keys)/sizeof(overlay_keys[0]);
-	c.overlay_keys_to_sample = overlay_keys;
-
-	c.num_resources_to_sample = sizeof(resource_names) / sizeof(resource_names[0]);
-	c.resource_directories_to_sample = resource_directories;
-	c.resource_filenames_to_sample = resource_names;
-
-
-	RawInterface raw;
-	raw.Init();
-	CursorBasedInterface cursor;
-	cursor.Init(c, raw.Get());
-
-	InterfaceAuditor auditor;
-	auditor.AuditInterfaces(&raw, &cursor, c);
-
-    return 0;
-}
 
 template <typename T>
 void uninit(T &ret)
@@ -227,18 +60,10 @@ void uninit(char *s, uint32_t asize)
 	s[1] = '\0';
 }
 
-
 void InterfaceAuditor::compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
-
-	// 1.26 kb
-	// "base_status_error.png"
-	//const char *resource_name = "icons/base_status_error.png";
-	//char buf[2048];
-	//uint32_t u = cpp->resi->LoadSharedResource(resource_name, buf, sizeof(buf));
-	//printf("LoadSharedResoure result %d\n", u);
 
 	for (int i = 0; i < c.num_resources_to_sample; i++)
 	{
@@ -246,11 +71,9 @@ void InterfaceAuditor::compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		uninit(apathbuffer);
 		{
 			uint32_t aret = a->resi->GetResourceFullPath(
-						c.resource_filenames_to_sample[i], 
-						c.resource_directories_to_sample[i],
-						apathbuffer, sizeof(apathbuffer));
-			dprintf("GetResourceFullPath result %d\n", aret);
-
+				c.resource_filenames_to_sample[i],
+				c.resource_directories_to_sample[i],
+				apathbuffer, sizeof(apathbuffer));
 
 			char bpathbuffer[256];
 			uninit(bpathbuffer);
@@ -274,27 +97,20 @@ void InterfaceAuditor::compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 			char *abuf = (char *)malloc(asize);
 			uninit(abuf, asize);
 			uint32_t aret = a->resi->LoadSharedResource(joinedname, abuf, asize);
-			dprintf("LoadSharedResource result %d\n", aret);
-
 			char *bbuf = (char *)malloc(bsize);
 			uninit(bbuf, bsize);
 			uint32_t bret = b->resi->LoadSharedResource(joinedname, bbuf, bsize);
-			dprintf("LoadSharedResource result %d\n", aret);
 			ASSERT(aret == bret);
 			ASSERT(memcmp(abuf, bbuf, asize) == 0);
-
 			free(abuf);
 			free(bbuf);
 
 			char *abuf2 = (char *)malloc(asize);
 			uninit(abuf2, asize);
 			uint32_t aret2 = a->resi->LoadSharedResource(apathbuffer, abuf2, asize);
-			dprintf("LoadSharedResource result %d\n", aret2);
-
 			char *bbuf2 = (char *)malloc(asize);
 			uninit(bbuf2, asize);
 			uint32_t bret2 = b->resi->LoadSharedResource(apathbuffer, bbuf2, asize);
-			dprintf("LoadSharedResource result %d\n", bret2);
 			ASSERT(aret2 == bret2);
 			ASSERT(memcmp(abuf2, bbuf2, asize) == 0);
 
@@ -302,8 +118,6 @@ void InterfaceAuditor::compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 			free(bbuf2);
 		}
 	}
-
-	dprintf("bla");
 }
 
 
@@ -322,7 +136,6 @@ void InterfaceAuditor::compare_screeni_interfaces(OpenVRInterfaceUnderTest *ia, 
 	{
 		vr::EVRScreenshotError errora;
 		vr::EVRScreenshotType typea = a->screeni->GetScreenshotPropertyType(handlea, &errora);
-		dprintf("bla");
 	}
 	{
 		char preview_filename[256];
@@ -331,7 +144,6 @@ void InterfaceAuditor::compare_screeni_interfaces(OpenVRInterfaceUnderTest *ia, 
 		uint32_t rca = a->screeni->GetScreenshotPropertyFilename(
 			handlea, vr::VRScreenshotPropertyFilenames_Preview,
 			preview_filename, sizeof(preview_filename), &errora);
-		dprintf("bla");
 	}
 
 	{
@@ -341,7 +153,6 @@ void InterfaceAuditor::compare_screeni_interfaces(OpenVRInterfaceUnderTest *ia, 
 		uint32_t rca = a->screeni->GetScreenshotPropertyFilename(
 			handlea, vr::VRScreenshotPropertyFilenames_VR,
 			vr_filename, sizeof(vr_filename), &errora);
-		dprintf("bla");
 	}
 }
 
@@ -369,7 +180,7 @@ void InterfaceAuditor::compare_exdi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		ASSERT(aw == bw);
 		ASSERT(ah == bh);
 	}
-	
+
 	{
 		uint32_t ax; uninit(ax);
 		uint32_t ay; uninit(ay);
@@ -418,17 +229,17 @@ void InterfaceAuditor::process_overlay_events_on_handles(
 
 		if (brca)
 		{
-			dprintf("%s\n", openvr_string::to_string(event_a).c_str());
+			//dprintf("%s\n", openvr_string::to_string(event_a).c_str());
 			ia->PushOverlayEvent(handle, &event_a);
 			ib->PushOverlayEvent(handle, &event_a);
 		}
 	}
 }
 
-void InterfaceAuditor::compare_per_overlay_handles(	vr::VROverlayHandle_t overlay_handle_a,
-									vr::VROverlayHandle_t overlay_handle_b,
-									openvr_broker::open_vr_interfaces *a, 
-									openvr_broker::open_vr_interfaces *b)
+void InterfaceAuditor::compare_per_overlay_handles(vr::VROverlayHandle_t overlay_handle_a,
+	vr::VROverlayHandle_t overlay_handle_b,
+	openvr_broker::open_vr_interfaces *a,
+	openvr_broker::open_vr_interfaces *b)
 {
 	{
 		uint32_t pid_a = a->ovi->GetOverlayRenderingPid(overlay_handle_a);
@@ -495,7 +306,7 @@ void InterfaceAuditor::compare_per_overlay_handles(	vr::VROverlayHandle_t overla
 
 	{
 		float texelaspecta; uninit(texelaspecta);
-		float texelaspectb; uninit(texelaspectb); 
+		float texelaspectb; uninit(texelaspectb);
 		vr::EVROverlayError reta = a->ovi->GetOverlayTexelAspect(overlay_handle_a, &texelaspecta);
 		vr::EVROverlayError retb = b->ovi->GetOverlayTexelAspect(overlay_handle_b, &texelaspectb);
 		ASSERT(reta == retb);
@@ -602,7 +413,7 @@ void InterfaceAuditor::compare_per_overlay_handles(	vr::VROverlayHandle_t overla
 		uninit(chComponentNamea);
 		vr::EVROverlayError reta = a->ovi->GetOverlayTransformTrackedDeviceComponent(
 			overlay_handle_a, &device_indexa, chComponentNamea, sizeof(chComponentNamea));
-		
+
 		vr::TrackedDeviceIndex_t device_indexb; uninit(device_indexb);
 		char chComponentNameb[256];
 		uninit(chComponentNameb);
@@ -702,7 +513,7 @@ void InterfaceAuditor::compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, Open
 
 		vr::VROverlayHandle_t overlay_handle_b; uninit(overlay_handle_b);
 		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_b);
-		ASSERT(errora == errorb);	
+		ASSERT(errora == errorb);
 	}
 
 	// check that the handles can find their keys
@@ -728,7 +539,7 @@ void InterfaceAuditor::compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, Open
 		ASSERT(errora == errorb);
 		ASSERT(overlay_handle_a == overlay_handle_b);
 	}
-	
+
 	process_overlay_events_on_handles(ia, &a_handles, ib, &b_handles);
 
 	for (int i = 0; i < c.num_overlays_to_sample; i++)
@@ -847,7 +658,7 @@ void InterfaceAuditor::compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, Open
 	{
 		for (int i = 0; i < c.num_overlays_to_sample; i++)
 		{
-			uint32_t aw=99, ah=99;
+			uint32_t aw = 99, ah = 99;
 			vr::EVROverlayError aimg_err = a->ovi->GetOverlayImageData(a_handles[i], nullptr, 0, &aw, &ah);
 
 			uint32_t bw = 99, bh = 99;
@@ -909,7 +720,7 @@ void InterfaceAuditor::compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
-	
+
 	ia->Refresh();
 	ib->Refresh();
 
@@ -918,15 +729,15 @@ void InterfaceAuditor::compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 		vr::ETrackingUniverseOrigin bret = b->compi->GetTrackingSpace();
 		ASSERT(aret == bret);
 	}
-	
+
 	{
 		vr::TrackedDevicePose_t render_posesa[vr::k_unMaxTrackedDeviceCount];
 		vr::TrackedDevicePose_t game_posesa[vr::k_unMaxTrackedDeviceCount];
 		uninit(render_posesa);
 		uninit(game_posesa);
 		vr::EVRCompositorError rca = a->compi->GetLastPoses(
-										render_posesa, vr::k_unMaxTrackedDeviceCount,
-										game_posesa, vr::k_unMaxTrackedDeviceCount);
+			render_posesa, vr::k_unMaxTrackedDeviceCount,
+			game_posesa, vr::k_unMaxTrackedDeviceCount);
 
 		vr::TrackedDevicePose_t render_posesb[vr::k_unMaxTrackedDeviceCount];
 		vr::TrackedDevicePose_t game_posesb[vr::k_unMaxTrackedDeviceCount];
@@ -934,8 +745,8 @@ void InterfaceAuditor::compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 		uninit(game_posesb);
 
 		vr::EVRCompositorError rcb = b->compi->GetLastPoses(
-										render_posesb, vr::k_unMaxTrackedDeviceCount,
-										game_posesb, vr::k_unMaxTrackedDeviceCount);
+			render_posesb, vr::k_unMaxTrackedDeviceCount,
+			game_posesb, vr::k_unMaxTrackedDeviceCount);
 
 		ASSERT(rca == rcb);
 		ASSERT(softcompare_is_similar(render_posesa, render_posesb, vr::k_unMaxTrackedDeviceCount) == true);
@@ -966,7 +777,7 @@ void InterfaceAuditor::compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 			atimings[i].m_nSize = sizeof(vr::Compositor_FrameTiming);
 			btimings[i].m_nSize = sizeof(vr::Compositor_FrameTiming);
 		}
-	
+
 		ia->Refresh();
 		ib->Refresh();
 		uint32_t reta = a->compi->GetFrameTimings(atimings, c.frame_timings_num_frames);
@@ -1067,12 +878,12 @@ void InterfaceAuditor::compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 		vr::ChaperoneCalibrationState retb = b->chapi->GetCalibrationState();
 		ASSERT(reta == retb);
 	}
-	
+
 	{
 		float sizexa; uninit(sizexa);
 		float sizeza; uninit(sizeza);
 		bool reta = a->chapi->GetPlayAreaSize(&sizexa, &sizeza);
-		
+
 		float sizexb; uninit(sizexb);
 		float sizezb; uninit(sizezb);
 		bool retb = b->chapi->GetPlayAreaSize(&sizexb, &sizezb);
@@ -1082,7 +893,7 @@ void InterfaceAuditor::compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 	}
 
 	{
-		vr::HmdQuad_t quada;uninit(quada);
+		vr::HmdQuad_t quada; uninit(quada);
 		bool reta = a->chapi->GetPlayAreaRect(&quada);
 
 		vr::HmdQuad_t quadb; uninit(quadb);
@@ -1132,7 +943,7 @@ void InterfaceAuditor::compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 		vr::HmdColor_t *color_array_b = (vr::HmdColor_t *)malloc(sizeof(vr::HmdColor_t) * c.num_bounds_colors);
 		vr::HmdColor_t camera_b; uninit(camera_b);
 		b->chapi->GetBoundsColor(color_array_b, c.num_bounds_colors, c.collision_bounds_fade_distance, &camera_b);
-		
+
 		ASSERT(softcompare_is_similar(color_array_a, color_array_b, c.num_bounds_colors, 0.01f));
 		ASSERT(softcompare_is_similar(camera_a, camera_b, 0.01f));
 		free(color_array_a);
@@ -1144,7 +955,7 @@ void InterfaceAuditor::compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, O
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
-	
+
 	{
 		float sizexa; uninit(sizexa);
 		float sizeza; uninit(sizeza);
@@ -1240,7 +1051,7 @@ void InterfaceAuditor::compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, O
 		}
 	}
 
-	{	
+	{
 		uint32_t quad_counta = 0; // test zero
 		bool rca = a->chapsi->GetLiveCollisionBoundsInfo(nullptr, &quad_counta);
 
@@ -1349,7 +1160,7 @@ void InterfaceAuditor::compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		vr::k_pch_SteamVR_RenderTargetMultiplier_Float,
 		vr::k_pch_SteamVR_IpdOffset_Float
 	};
-	
+
 	for (auto key : steam_floats)
 	{
 		vr::EVRSettingsError errora; uninit(errora);
@@ -1360,7 +1171,7 @@ void InterfaceAuditor::compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 
 		ASSERT(fa == fb);
 		ASSERT(errora == errorb);
-		
+
 		// change it
 		float new_val = fa + 1.0f;
 
@@ -1377,7 +1188,7 @@ void InterfaceAuditor::compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		float fb1 = b->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read1errorb);	// reads from snapshot of a
 
 
-		// write the old version back
+																						// write the old version back
 		vr::EVRSettingsError write2errora; uninit(write2errora);
 		vr::EVRSettingsError write2errorb; uninit(write2errorb);
 		a->seti->SetFloat(vr::k_pch_SteamVR_Section, key, fa, &write2errora);
@@ -1388,7 +1199,7 @@ void InterfaceAuditor::compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		vr::EVRSettingsError read2errora; uninit(read2errora);
 		vr::EVRSettingsError read2errorb; uninit(read2errorb);
 		// check it again
-		float finala = a->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read2errora);	
+		float finala = a->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read2errora);
 		float finalb = b->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read2errorb);	// reads from snapshot of a
 
 		ASSERT(write1errora == write1errorb);
@@ -1449,14 +1260,14 @@ static void write_manifest(std::string filename, const std::vector<std::string> 
 		fprintf(pf, "  \"image_path\" : \"\"\n");
 
 
-		if (i < (int)app_keys.size()-1)
+		if (i < (int)app_keys.size() - 1)
 		{
 			fprintf(pf, "},\n");
 		}
 		else
 		{
 			fprintf(pf, "}\n");
-		}	
+		}
 	}
 	fprintf(pf, "]}\n");
 	fclose(pf);
@@ -1476,16 +1287,16 @@ void InterfaceAuditor::compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		ASSERT(ba == bb);
 	}
 
-	
+
 	ia->Refresh();
 	ib->Refresh();
 
-	
+
 	// try adding a temporary app manifest
 	// to add apps, use a unique filename and list a bunch of things in it
 	// to remove apps, use the same filename and remove the apps from it
-	
-	
+
+
 	{
 		// notes on app manifests
 		// https://steamcommunity.com/app/358720/discussions/0/357284767245532150/?l=norwegian
@@ -1502,7 +1313,7 @@ void InterfaceAuditor::compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		ia->Refresh();
 		ib->Refresh();
 		compare_apps(a->appi, b->appi);
-		
+
 		std::vector<std::string> nokeys;
 		write_manifest(manifest_path, nokeys);
 		vr::EVRApplicationError erra1 = a->appi->AddApplicationManifest(manifest_path, true);
@@ -1540,7 +1351,7 @@ void InterfaceAuditor::compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 				ib->Refresh();
 			}
 		}
-		ASSERT(succeeded);	
+		ASSERT(succeeded);
 	}
 
 	{
@@ -1550,7 +1361,7 @@ void InterfaceAuditor::compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		bool ba = a->appi->IsApplicationInstalled("smursmur");
 		bool bb = b->appi->IsApplicationInstalled("smursmur");
 		ASSERT(ba == bb);
-		
+
 		uint32_t weirdb = a->appi->GetApplicationCount();
 		ASSERT(weirda == weirdb);
 		uint32_t weirdc = a->appi->GetApplicationCount();
@@ -1576,7 +1387,7 @@ void InterfaceAuditor::compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 			ASSERT(errora == errorb);
 		}
 	}
-	
+
 	{
 		for (int i = 0; i < (int)a->appi->GetApplicationCount(); i++)
 		{
@@ -1675,7 +1486,7 @@ void InterfaceAuditor::compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 			{
 				std::vector<vr::EVRApplicationProperty> uint64_properties =
 				{
-					vr::VRApplicationProperty_LastLaunchTime_Uint64,					
+					vr::VRApplicationProperty_LastLaunchTime_Uint64,
 				};
 
 				for (auto prop : uint64_properties)
@@ -1685,12 +1496,12 @@ void InterfaceAuditor::compare_appi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 					uint64_t reta = a->appi->GetApplicationPropertyUint64(bufa, prop, &errora);
 					uint64_t retb = b->appi->GetApplicationPropertyUint64(bufb, prop, &errorb);
 					ASSERT(reta == retb);
-					ASSERT(errora == errorb);					
+					ASSERT(errora == errorb);
 				}
 			}
 		}
 	}
-	
+
 	{
 		vr::EVRApplicationTransitionState sta = a->appi->GetTransitionState();
 		vr::EVRApplicationTransitionState stb = b->appi->GetTransitionState();
@@ -1811,7 +1622,7 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 
 			for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
 			{
-				ASSERT(softcompare_is_similar(posea[i],poseb[i]));
+				ASSERT(softcompare_is_similar(posea[i], poseb[i]));
 			}
 		}
 		vr::HmdMatrix34_t seateda = a->sysi->GetSeatedZeroPoseToStandingAbsoluteTrackingPose();
@@ -1829,7 +1640,7 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 	{
 		for (int i = 0; i <= 4; i++)
 		{
-			for (int j = 0; j < vr::k_unMaxTrackedDeviceCount+1; j++)
+			for (int j = 0; j < vr::k_unMaxTrackedDeviceCount + 1; j++)
 			{
 				vr::TrackedDeviceIndex_t unRelativeToTrackedDeviceIndex;
 				if (j == 0)
@@ -1840,7 +1651,7 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 				{
 					unRelativeToTrackedDeviceIndex = j - 1;
 				}
-				
+
 
 				vr::TrackedDeviceIndex_t indicesa[vr::k_unMaxTrackedDeviceCount];
 				uninit(indicesa);
@@ -1897,7 +1708,7 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		ASSERT(classa == classb);
 		ASSERT(connecteda == connectedb);
 	}
-	
+
 
 	for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
 	{
@@ -1910,7 +1721,7 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 	}
 
 
-	
+
 	{
 		for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
 		{
@@ -1920,7 +1731,7 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 				vr::TrackedDevicePose_t posea;
 				uninit(statea);
 				uninit(posea);
-				
+
 				bool reta = a->sysi->GetControllerStateWithPose(
 					vr::ETrackingUniverseOrigin(j),
 					i,
@@ -1941,7 +1752,7 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 				{
 					ASSERT(reta == retb);
 				}
-				
+
 				int compare_score = softcompare_controllerstates(&statea, &stateb);
 				ASSERT(compare_score < 3);
 				if (reta)
@@ -2013,7 +1824,7 @@ void InterfaceAuditor::compare_taci_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 			uint32_t wa; uninit(wa);
 			uint32_t ha; uninit(ha);
 			uint32_t sizea; uninit(sizea);
-			
+
 			uint32_t wb; uninit(wb);
 			uint32_t hb; uninit(hb);
 			uint32_t sizeb; uninit(sizeb);
@@ -2076,7 +1887,7 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 	{
 		uint32_t counta = 66;
 		bool rca = a->chapsi->GetLiveCollisionBoundsInfo(nullptr, &counta);
-		uint32_t countb=77;
+		uint32_t countb = 77;
 		bool rcb = b->chapsi->GetLiveCollisionBoundsInfo(nullptr, &countb);
 		ASSERT(counta == 66);
 		ASSERT(countb == 77);
@@ -2113,9 +1924,9 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 		ASSERT((rca == false) && (rcb == false));
 	}
 
-	
+
 	// GetLiveSeatedZeroPoseToRawTrackingPose
-	{	
+	{
 		bool ba = a->chapsi->GetLiveSeatedZeroPoseToRawTrackingPose(nullptr);
 		bool bb = b->chapsi->GetLiveSeatedZeroPoseToRawTrackingPose(nullptr);
 		ASSERT(ba == bb);
@@ -2139,7 +1950,7 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 			ASSERT(ba == bb);
 			dprintf("ba");
 		}
-		
+
 		// nullptr test 2
 		{
 			uint32_t ba = a->compi->GetVulkanInstanceExtensionsRequired(nullptr, 42);
@@ -2147,8 +1958,8 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 			ASSERT(ba == bb);
 			dprintf("ba");
 		}
-		
-		
+
+
 		{
 			char bufa[256]; uninit(bufa);
 			uint32_t ba = a->compi->GetVulkanInstanceExtensionsRequired(bufa, 256);
@@ -2157,11 +1968,11 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 			ASSERT(ba == bb);
 			ASSERT(strcmp(bufa, bufb) == 0);
 			dprintf("ba");
-		}			
+		}
 	}
-	
+
 	{
-		vr::EVRCompositorError ba = a->compi->GetLastPoses(nullptr, 0,nullptr, 0);
+		vr::EVRCompositorError ba = a->compi->GetLastPoses(nullptr, 0, nullptr, 0);
 		vr::EVRCompositorError bb = b->compi->GetLastPoses(nullptr, 0, nullptr, 0);
 		ASSERT(ba == bb);
 	}
@@ -2173,7 +1984,7 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 		vr::TrackedDevicePose_t rposesb[16]; uninit(rposesb);
 		vr::EVRCompositorError ba = a->compi->GetLastPoses(rposesa, 1, gposesa, 1);
 		vr::EVRCompositorError bb = b->compi->GetLastPoses(rposesb, 1, gposesb, 1);
-		
+
 		ASSERT(softcompare_is_similar(gposesa[0], gposesb[0]));
 		ASSERT(softcompare_is_similar(rposesa[0], rposesb[0]));
 		ASSERT(ba == bb);
@@ -2191,7 +2002,7 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 			if (errora != vr::VRRenderModelError_Loading)
 				break;
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		}	
+		}
 
 		vr::EVRRenderModelError errorb; uninit(errorb);
 		vr::RenderModel_t *modelb = nullptr;
@@ -2246,7 +2057,7 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 		vr::RenderModel_t *modela = nullptr;
 		while (1)
 		{
-			 errora = a->remi->LoadRenderModel_Async(render_model_name, &modela);
+			errora = a->remi->LoadRenderModel_Async(render_model_name, &modela);
 			if (errora != vr::VRRenderModelError_Loading)
 				break;
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -2370,7 +2181,7 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 			{
 				ASSERT(terrora == terrorb);
 			}
-			
+
 			ASSERT(strcmp(thumba, thumbb) == 0);
 			char patha[256]; uninit(patha);
 			char pathb[256]; uninit(pathb);
@@ -2406,7 +2217,7 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 					// if there is a render model name, then compare them
 					ASSERT(strcmp(crmnamea, crmnameb) == 0);
 				}
-				
+
 				bool hasa = a->remi->RenderModelHasComponent(namea, cnamea);
 				bool hasb = b->remi->RenderModelHasComponent(nameb, cnameb);
 				ASSERT(hasa == hasb);
@@ -2453,7 +2264,7 @@ void InterfaceAuditor::interactive_component_state_test(OpenVRInterfaceUnderTest
 		bool breta = a->sysi->GetControllerState(3, &controller_statea, sizeof(controller_statea));
 		bool bretb = b->sysi->GetControllerState(3, &controller_stateb, sizeof(controller_stateb));
 		ASSERT(breta == bretb);
-		
+
 		bool csa = a->remi->GetComponentState(
 			pchRenderModelName,
 			pchComponentName,
@@ -2500,6 +2311,6 @@ void InterfaceAuditor::interactive_component_state_test(OpenVRInterfaceUnderTest
 			{
 				dprintf("score is %d\n", score);
 			}
-		}	
+		}
 	}
 }

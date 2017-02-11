@@ -3465,12 +3465,52 @@ class InternalIndexer
 
 };
 
+static void write_string_vector_to_stream(EncodeStream &s, std::vector<std::string> &v)
+{
+	uint32_t count = v.size();
+	encode(count, s);
+	
+	for (int i = 0; i < (int)count; i++)
+	{
+		encode(v[i].c_str(), s);
+	}
+}
+
+static void read_string_vector_from_stream(EncodeStream &s, std::vector<std::string> &v)
+{
+	uint32_t count;
+	decode(count, s);
+	v.reserve(count);
+	for (int i = 0; i < (int)count; i++)
+	{
+		char szBuf[256];
+		decode_str(szBuf, s);
+		v.emplace_back(szBuf);
+	}
+}
+
 // knows how to map indexes to application keys
 class ApplicationsIndexer
 {
 public:
 	ApplicationsIndexer()
 	{
+	}
+
+	void WriteToStream(EncodeStream &s)
+	{
+		write_string_vector_to_stream(s, app_keys);
+	}
+
+	void ReadFromStream(EncodeStream &s)
+	{
+		app_keys.clear();
+		app_keys2index.clear();
+		read_string_vector_from_stream(s, app_keys);
+		for (int i = 0; i < (int)app_keys.size(); i++)
+		{
+			app_keys2index.insert({ app_keys[i], i });
+		}
 	}
 
 	void update(std::vector<int> *active_indexes, ApplicationsWrapper &ow)
@@ -3563,11 +3603,25 @@ public:
 		}
 	}
 
+	void WriteToStream(EncodeStream &s)
+	{
+		write_string_vector_to_stream(s, m_resource_directories);
+		write_string_vector_to_stream(s, m_resource_filenames);
+	}
+
+	void ReadFromStream(EncodeStream &s)
+	{
+		m_resource_directories.clear();
+		m_resource_filenames.clear();
+		
+		read_string_vector_from_stream(s, m_resource_directories);
+		read_string_vector_from_stream(s, m_resource_filenames);
+	}
+
 	const char *get_filename_for_index(int index, int *fname_size)
 	{
 		*fname_size = m_resource_filenames[index].size() + 1;
 		return m_resource_filenames[index].c_str();
-
 	}
 
 	const char * get_directoryname_for_index(int index, int *dname_size)
@@ -3599,6 +3653,24 @@ public:
 		}
 	}
 
+	void WriteToStream(EncodeStream &s)
+	{
+		write_string_vector_to_stream(s, overlay_keys);
+	}
+
+	void ReadFromStream(EncodeStream &s)
+	{
+		overlay_keys.clear();
+		overlay_keys2index.clear();
+		overlay_handle2index.clear();
+		read_string_vector_from_stream(s, overlay_keys);
+		for (int i = 0; i < (int)overlay_keys.size(); i++)
+		{
+			overlay_keys2index.insert({ overlay_keys[i], i });
+		}
+	}
+
+
 	// walks through known overlays and updates index set
 	void update(std::vector<int> *active_indexes, OverlayWrapper &ow)
 	{	
@@ -3612,7 +3684,7 @@ public:
 				// lookup it's index
 				int index = get_overlay_index_for_key(overlay_keys[i]);
 				active_indexes->push_back(index);
-				overlay_handle2index.insert({ handle, index });
+				overlay_handle2index.insert({ handle, index });	// cache it's handle
 			}
 		}
 	}
@@ -3683,36 +3755,81 @@ struct AdditionalResourceKeys
 	OverlayIndexer	&GetOverlayIndexer()			{ return m_overlay_indexer; }
 	ApplicationsIndexer &GetApplicationsIndexer()	{ return m_applications_indexer; }
 	ResourcesIndexer &GetResourcesIndexer()			{ return m_resources_indexer; }
-
-
+	
 	AdditionalResourceKeys(const TrackerConfig &c, ALLOCATOR_DECL)
 		:	m_overlay_indexer(c.overlay_keys_to_sample, c.num_overlays_to_sample),
 			m_resources_indexer(c.resource_filenames_to_sample, c.resource_directories_to_sample, c.num_resources_to_sample)
 	{
-		nearz = c.nearz;
-		farz = c.farz;
-		distortionU = c.distortionU;
-		distortionV = c.distortionV;
-		predicted_seconds_to_photon = c.predicted_seconds_to_photon;
-		num_bounds_colors = c.num_bounds_colors;
-		collision_bounds_fade_distance = c.collision_bounds_fade_distance;
-		frame_timing_frames_ago = c.frame_timing_frames_ago;
-		frame_timings_num_frames = c.frame_timings_num_frames;
+		m_data.nearz = c.nearz;
+		m_data.farz = c.farz;
+		m_data.distortionU = c.distortionU;
+		m_data.distortionV = c.distortionV;
+		m_data.predicted_seconds_to_photon = c.predicted_seconds_to_photon;
+		m_data.num_bounds_colors = c.num_bounds_colors;
+		m_data.collision_bounds_fade_distance = c.collision_bounds_fade_distance;
+		m_data.frame_timing_frames_ago = c.frame_timing_frames_ago;
+		m_data.frame_timings_num_frames = c.frame_timings_num_frames;
 	}
 
-	float nearz;
-	float farz;
+	void write_to_stream(EncodeStream &stream)
+	{
+		stream.memcpy_out_to_stream(&m_data, sizeof(m_data));
+		m_overlay_indexer.WriteToStream(stream);
+		m_applications_indexer.WriteToStream(stream);
+		m_resources_indexer.WriteToStream(stream);
+	}
 
-	float distortionU;
-	float distortionV;
+	void read_from_stream(EncodeStream &stream)
+	{
+		stream.memcpy_from_stream(&m_data, sizeof(m_data));
+		m_overlay_indexer.ReadFromStream(stream);
+		m_applications_indexer.ReadFromStream(stream);
+		m_resources_indexer.ReadFromStream(stream);
+	}
 
-	float predicted_seconds_to_photon;
+	uint64_t GetEncodedSize()
+	{
+		EncodeStream counter(nullptr, 0, true);
+		write_to_stream(counter);
+		return counter.buf_pos;		
+	}
 
-	int num_bounds_colors;
-	float collision_bounds_fade_distance;
+	void Encode(char *buf, uint64_t buf_size)
+	{
+		EncodeStream encoder(buf, buf_size, false);
+		write_to_stream(encoder);
+	}
 
-	uint32_t frame_timing_frames_ago;
-	uint32_t frame_timings_num_frames;
+	void Decode(char *buf, uint64_t buf_size)
+	{
+		EncodeStream decoder(buf, buf_size, false);
+		read_from_stream(decoder);
+	}
+
+	float GetNearZ() const { return m_data.nearz; }
+	float GetFarZ() const { return m_data.farz; }
+	float GetDistortionU() const { return m_data.distortionU; }
+	float GetDistortionV() const { return m_data.distortionV; }
+	float GetPredictedSecondsToPhoton() const { return m_data.predicted_seconds_to_photon; }
+	int GetNumBoundsColors() const { return m_data.num_bounds_colors; }
+	float GetCollisionBoundsFadeDistance() const { return m_data.collision_bounds_fade_distance; }
+	uint32_t GetFrameTimingFramesAgo() const { return m_data.frame_timing_frames_ago; }
+	uint32_t GetFrameTimingsNumFrames() const { return m_data.frame_timings_num_frames; }
+
+private:
+	struct {
+		float nearz;
+		float farz;
+		float distortionU;
+		float distortionV;
+		float predicted_seconds_to_photon;
+		int num_bounds_colors;
+		float collision_bounds_fade_distance;
+		uint32_t frame_timing_frames_ago;
+		uint32_t frame_timings_num_frames;
+	} m_data;
+
+	
 
 	OverlayIndexer m_overlay_indexer;
 	ApplicationsIndexer m_applications_indexer;
@@ -3877,7 +3994,15 @@ static void visit_hidden_mesh(visitor_fn &visitor,
 		vr::HiddenAreaMesh_t mesh = sysi->GetHiddenAreaMesh(eEye, mesh_type);
 		vertex_data = mesh.pVertexData;
 		hidden_mesh_triangle_count.val = mesh.unTriangleCount;
-		vertex_data_count = mesh.unTriangleCount * 3;
+		if (mesh_type == vr::k_eHiddenAreaMesh_LineLoop)
+		{
+			vertex_data_count = mesh.unTriangleCount;  // from openvr.h LineLoop->"triangle count" is vertex count
+		}
+		else
+		{
+			vertex_data_count = mesh.unTriangleCount * 3;
+		} 
+		
 
 		visitor.visit_node(ss->hidden_mesh_triangle_count.item, hidden_mesh_triangle_count);
 		visitor.visit_node(ss->hidden_mesh_vertices.item, vertex_data, vertex_data_count);
@@ -3900,12 +4025,11 @@ static void visit_eye_state(visitor_fn &visitor,
 	visitor.start_group_node("eye", eEye);
 	{
 		twrap t("   system_eye_scalars");
-		LEAF_SCALAR(projection, wrap.GetProjectionMatrix(eEye, c.nearz, c.farz));
+		LEAF_SCALAR(projection, wrap.GetProjectionMatrix(eEye, c.GetNearZ(), c.GetFarZ()));
 		LEAF_SCALAR(eye2head, wrap.GetEyeToHeadTransform(eEye));
 		LEAF_SCALAR(projection_raw, wrap.GetProjectionRaw(eEye));
-		LEAF_SCALAR(distortion, wrap.ComputeDistortion(eEye, c.distortionU, c.distortionV));
+		LEAF_SCALAR(distortion, wrap.ComputeDistortion(eEye, c.GetDistortionU(), c.GetDistortionV()));
 	}
-
 
 	if (ss->hidden_meshes.size() < 3)
 	{
@@ -4074,7 +4198,7 @@ static void visit_system_node(
 								vrstate::system_schema *ss, 
 								IVRSystem *sysi, SystemWrapper sysw, 
 								RenderModelWrapper rmw, 
-								const AdditionalResourceKeys &tracker_config,
+								const AdditionalResourceKeys &resource_keys,
 								ALLOCATOR_DECL)
 {
 	visitor.start_group_node("system", -1);
@@ -4129,7 +4253,7 @@ static void visit_system_node(
 		{
 			vrstate::eye_schema *es = &ss->eyes[i];
 			vr::EVREye eEye = (i == 0) ? vr::Eye_Left : vr::Eye_Right;
-			visit_eye_state(visitor, &ss->eyes[i], eEye, sysi, sysw, tracker_config, allocator);
+			visit_eye_state(visitor, &ss->eyes[i], eEye, sysi, sysw, resource_keys, allocator);
 		}
 		END_VECTOR(eyes);
 	}
@@ -4156,13 +4280,13 @@ static void visit_system_node(
 				memset(standing_pose_array, 0, sizeof(standing_pose_array));
 				memset(seated_pose_array, 0, sizeof(seated_pose_array));
 				sysi->GetDeviceToAbsoluteTrackingPose(TrackingUniverseRawAndUncalibrated, 
-									tracker_config.predicted_seconds_to_photon, raw_pose_array, vr::k_unMaxTrackedDeviceCount);
+									resource_keys.GetPredictedSecondsToPhoton(), raw_pose_array, vr::k_unMaxTrackedDeviceCount);
 
 				sysi->GetDeviceToAbsoluteTrackingPose(TrackingUniverseStanding, 
-									tracker_config.predicted_seconds_to_photon, standing_pose_array, vr::k_unMaxTrackedDeviceCount);
+									resource_keys.GetPredictedSecondsToPhoton(), standing_pose_array, vr::k_unMaxTrackedDeviceCount);
 
 				sysi->GetDeviceToAbsoluteTrackingPose(TrackingUniverseSeated, 
-									tracker_config.predicted_seconds_to_photon, seated_pose_array, vr::k_unMaxTrackedDeviceCount);
+									resource_keys.GetPredictedSecondsToPhoton(), seated_pose_array, vr::k_unMaxTrackedDeviceCount);
 			}
 			for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
 			{
@@ -4235,10 +4359,11 @@ void visit_application_state(visitor_fn &visitor, vrstate::application_schema *s
 {
 	visitor.start_group_node("app_state", app_index);
 
-	int count;
-	const char *app_key = helper->get_key_for_index(app_index, &count);
+	const char *app_key = nullptr;
 	if (visitor.visit_openvr())
 	{
+		int count;
+		app_key = helper->get_key_for_index(app_index, &count);
 		visitor.visit_node(ss->application_key.item, app_key, count);
 		scalar<uint32_t> process_id = wrap.GetApplicationProcessId(app_key);
 		LEAF_SCALAR(process_id, process_id);
@@ -4283,14 +4408,14 @@ void visit_mime_type_schema(visitor_fn &visitor, vrstate::mime_type_schema *ss,
 
 template <typename visitor_fn>
 static void visit_applications_node(visitor_fn &visitor, vrstate::applications_schema *ss, ApplicationsWrapper wrap, 
-	 AdditionalResourceKeys &tracker_config, ALLOCATOR_DECL)
+	 AdditionalResourceKeys &resource_keys, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("app", -1);
 
 	if (visitor.visit_openvr())
 	{
 		std::vector<int> active_indexes;
-		tracker_config.GetApplicationsIndexer().update(&active_indexes, wrap);
+		resource_keys.GetApplicationsIndexer().update(&active_indexes, wrap);
 
 		int *ptr = nullptr;
 		if (active_indexes.size() > 0)
@@ -4304,10 +4429,10 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 		visitor.visit_node(ss->active_application_indexes.item);
 	}
 
-	if (tracker_config.GetApplicationsIndexer().get_num_applications() > (int)ss->applications.size())
+	if (resource_keys.GetApplicationsIndexer().get_num_applications() > (int)ss->applications.size())
 	{
-		ss->applications.reserve(tracker_config.GetApplicationsIndexer().get_num_applications());
-		while ((int)ss->applications.size() < tracker_config.GetApplicationsIndexer().get_num_applications())
+		ss->applications.reserve(resource_keys.GetApplicationsIndexer().get_num_applications());
+		while ((int)ss->applications.size() < resource_keys.GetApplicationsIndexer().get_num_applications())
 		{
 			ss->applications.emplace_back(allocator);
 		}
@@ -4334,7 +4459,7 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 	START_VECTOR(applications);
 	for (int i = 0; i < (int)ss->applications.size(); i++)
 	{
-		visit_application_state(visitor, &ss->applications[i], wrap, i, &tracker_config.GetApplicationsIndexer());
+		visit_application_state(visitor, &ss->applications[i], wrap, i, &resource_keys.GetApplicationsIndexer());
 	}
 	END_VECTOR(applications);
 
@@ -4416,7 +4541,7 @@ static void visit_chaperone_node(
 									visitor_fn &visitor, 
 									vrstate::chaperone_schema *ss,
 									ChaperoneWrapper &wrap,
-									const AdditionalResourceKeys &tracker_config)
+									const AdditionalResourceKeys &resource_keys)
 {
 	visitor.start_group_node("chaperone_schema", -1);
 		LEAF_SCALAR(calibration_state, wrap.GetCalibrationState());
@@ -4429,8 +4554,8 @@ static void visit_chaperone_node(
 			vector_result<HmdColor_t> colors(wrap.string_pool);
 			scalar<HmdColor_t> camera_color;
 
-			wrap.GetBoundsColor(&colors, tracker_config.num_bounds_colors, 
-						tracker_config.collision_bounds_fade_distance, 
+			wrap.GetBoundsColor(&colors, resource_keys.GetNumBoundsColors(), 
+						resource_keys.GetCollisionBoundsFadeDistance(), 
 						&camera_color);
 
 			visitor.visit_node(ss->bounds_colors.item, colors.s.buf(), colors.count);
@@ -4494,7 +4619,7 @@ static void visit_compositor_state(visitor_fn &visitor,
 		twrap t(" compositor_schema scalars");
 
 		LEAF_SCALAR(tracking_space, wrap.GetTrackingSpace());
-		LEAF_SCALAR(frame_timing, wrap.GetFrameTiming(config.frame_timing_frames_ago));
+		LEAF_SCALAR(frame_timing, wrap.GetFrameTiming(config.GetFrameTimingFramesAgo()));
 		LEAF_SCALAR(frame_time_remaining, wrap.GetFrameTimeRemaining());
 		LEAF_SCALAR(cumulative_stats, wrap.GetCumulativeStats());
 		LEAF_SCALAR(foreground_fade_color, wrap.GetForegroundFadeColor());
@@ -4511,7 +4636,7 @@ static void visit_compositor_state(visitor_fn &visitor,
 	if (visitor.visit_openvr())
 	{
 		vector_result<Compositor_FrameTiming> frame_timings(wrap.string_pool);
-		wrap.GetFrameTimings(config.frame_timings_num_frames, &frame_timings);
+		wrap.GetFrameTimings(config.GetFrameTimingsNumFrames(), &frame_timings);
 		visitor.visit_node(ss->frame_timings.item, frame_timings.s.buf(), frame_timings.count);
 	}
 	else
@@ -4570,8 +4695,6 @@ static void visit_permodelcomponent(
 	visitor.end_group_node("component", component_index);
 }
 
-// virtual uint32_t GetRenderModelName(uint32_t unRenderModelIndex, VR_OUT_STRING() char *pchRenderModelName, uint32_t unRenderModelNameLen) = 0;
-// visit_render_model(visitor, &ss->models[i], rmw, i);
 template <typename visitor_fn>
 static void visit_rendermodel(visitor_fn &visitor, 
 					vrstate::rendermodel_schema *ss, RenderModelWrapper wrap,
@@ -4761,7 +4884,6 @@ static void visit_per_overlay(
 	visitor.end_group_node("overlay", overlay_index);
 }
 
-
 template <typename visitor_fn>
 static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss, 
 								OverlayWrapper ow, 
@@ -4874,7 +4996,7 @@ static void visit_cameraframetype_schema(visitor_fn &visitor,
 	
 	LEAF_SCALAR(frame_size, tcw.GetCameraFrameSize(device_index, frame_type, &f));
 	LEAF_SCALAR(intrinsics, tcw.GetCameraIntrinsics(device_index, frame_type, &intrinsics));
-	LEAF_SCALAR(projection, tcw.GetCameraProjection(device_index, frame_type, config.nearz, config.farz, &projection));
+	LEAF_SCALAR(projection, tcw.GetCameraProjection(device_index, frame_type, config.GetNearZ(), config.GetFarZ(), &projection));
 	LEAF_SCALAR(video_texture_size, tcw.GetVideoStreamTextureSize(device_index, frame_type, &video_texture_size));
 
 	visitor.end_group_node("cameraframetypes", device_index);
@@ -4883,7 +5005,7 @@ static void visit_cameraframetype_schema(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_per_controller_state(visitor_fn &visitor, 
 		vrstate::trackedcamera_schema::controller_camera_schema *ss, TrackedCameraWrapper tcw, 
-		int device_index, AdditionalResourceKeys &tracker_config, ALLOCATOR_DECL)
+		int device_index, AdditionalResourceKeys &resource_keys, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("controller", device_index);
 	LEAF_SCALAR(has_camera, tcw.HasCamera(device_index));
@@ -4898,7 +5020,7 @@ static void visit_per_controller_state(visitor_fn &visitor,
 	START_VECTOR(cameraframetypes);
 	for (int i = 0; i < (int)ss->cameraframetypes.size(); i++)
 	{
-		visit_cameraframetype_schema(visitor, &ss->cameraframetypes[i], tcw, device_index, (EVRTrackedCameraFrameType)i, tracker_config);
+		visit_cameraframetype_schema(visitor, &ss->cameraframetypes[i], tcw, device_index, (EVRTrackedCameraFrameType)i, resource_keys);
 	}
 	END_VECTOR(cameraframetypes);
 	visitor.end_group_node("controller", device_index);
@@ -4907,7 +5029,7 @@ static void visit_per_controller_state(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_trackedcamera_state(visitor_fn &visitor, 
 									vrstate::trackedcamera_schema *ss, TrackedCameraWrapper tcw, 
-									AdditionalResourceKeys &tracker_config,
+									AdditionalResourceKeys &resource_keys,
 									ALLOCATOR_DECL)
 {
 	visitor.start_group_node("camera", -1);
@@ -4920,7 +5042,7 @@ static void visit_trackedcamera_state(visitor_fn &visitor,
 	START_VECTOR(controllers);
 	for (int i = 0; i < (int)ss->controllers.size(); i++)
 	{
-		visit_per_controller_state(visitor, &ss->controllers[i], tcw, i, tracker_config, allocator);
+		visit_per_controller_state(visitor, &ss->controllers[i], tcw, i, resource_keys, allocator);
 	}
 	END_VECTOR(controllers);
 
@@ -4930,16 +5052,16 @@ static void visit_trackedcamera_state(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_per_resource(visitor_fn &visitor,
 	vrstate::resources_schema *ss, ResourcesWrapper &wrap,
-	int i, AdditionalResourceKeys &tracker_config,
+	int i, AdditionalResourceKeys &resource_keys,
 	ALLOCATOR_DECL)
 {
 	visitor.start_group_node("resource", i);
 	if (visitor.visit_openvr())
 	{
 		int fname_size;
-		const char *fname = tracker_config.GetResourcesIndexer().get_filename_for_index(i, &fname_size);
+		const char *fname = resource_keys.GetResourcesIndexer().get_filename_for_index(i, &fname_size);
 		int dname_size;
-		const char *dname = tracker_config.GetResourcesIndexer().get_directoryname_for_index(i, &dname_size);
+		const char *dname = resource_keys.GetResourcesIndexer().get_directoryname_for_index(i, &dname_size);
 		visitor.visit_node(ss->resources[i].resource_name.item, fname, fname_size);
 		visitor.visit_node(ss->resources[i].resource_directory.item, dname, dname_size);
 
@@ -4967,15 +5089,15 @@ static void visit_per_resource(visitor_fn &visitor,
 template <typename visitor_fn>
 static void visit_resources_state(visitor_fn &visitor,
 	vrstate::resources_schema *ss, ResourcesWrapper &wrap,
-	AdditionalResourceKeys &tracker_config,
+	AdditionalResourceKeys &resource_keys,
 	ALLOCATOR_DECL)
 {
 	visitor.start_group_node("resources", -1);
 
-	if ((int)ss->resources.size() < tracker_config.GetResourcesIndexer().get_num_resources())
+	if ((int)ss->resources.size() < resource_keys.GetResourcesIndexer().get_num_resources())
 	{
-		ss->resources.reserve(tracker_config.GetResourcesIndexer().get_num_resources());
-		while ((int)ss->resources.size() < tracker_config.GetResourcesIndexer().get_num_resources())
+		ss->resources.reserve(resource_keys.GetResourcesIndexer().get_num_resources());
+		while ((int)ss->resources.size() < resource_keys.GetResourcesIndexer().get_num_resources())
 		{
 			ss->resources.emplace_back(allocator);
 		}
@@ -4984,7 +5106,7 @@ static void visit_resources_state(visitor_fn &visitor,
 	START_VECTOR(resources);
 	for (int i = 0; i < (int)ss->resources.size(); i++)
 	{
-		visit_per_resource(visitor, ss, wrap, i, tracker_config, allocator);
+		visit_per_resource(visitor, ss, wrap, i, resource_keys, allocator);
 	}
 	END_VECTOR(resources);
 
@@ -5053,7 +5175,6 @@ struct tracker
 	int blocking_update_calls;
 	int non_blocking_update_calls;
 	save_summary save_info;
-	
 	AdditionalResourceKeys additional_resource_keys;
 	
 	vrstate m_state;
@@ -8802,6 +8923,8 @@ struct header
 	uint64_t summary_size;
 	uint64_t state_offset;
 	uint64_t state_size;
+	uint64_t resource_keys_offset;
+	uint64_t resource_keys_size;
 	uint64_t event_offset;
 	uint64_t event_size;
 	uint64_t event_count;
@@ -8821,14 +8944,15 @@ void save_vrstate_to_file(vr_state_tracker_t h, const char *filename, bool binar
 		EncodeStream count_stream(nullptr, 0, true);
 		encoder_visitor counter(&count_stream);
 
-		openvr_broker::open_vr_interfaces null_interfaces;
-		openvr_broker::acquire_interfaces("null", &null_interfaces, nullptr);
-
 		// count state size
-		traverse_history_graph_sequential(counter, s, null_interfaces);
+		traverse_history_graph_sequential(counter, s);
 		uint64_t state_size = count_stream.buf_pos+1;
 		// pad it
 		uint64_t padded_state_size = (state_size + 3) & ~0x3;
+
+		//  
+		uint64_t resource_keys_size = s->additional_resource_keys.GetEncodedSize();
+		uint64_t padded_resource_keys_size = (resource_keys_size + 3) & ~0x3;				
 
 		// count event size
 		int num_events = 0;
@@ -8837,6 +8961,7 @@ void save_vrstate_to_file(vr_state_tracker_t h, const char *filename, bool binar
 			num_events++;
 		}
 		int event_size = num_events * sizeof(FrameNumberedEvent);
+		uint64_t padded_event_size = (event_size + 3) & ~0x3;
 		
 		// count timestamps size
 		int num_timestamps = s->m_frame_number;
@@ -8846,7 +8971,8 @@ void save_vrstate_to_file(vr_state_tracker_t h, const char *filename, bool binar
 		uint64_t total_size =	sizeof(header) + 
 								sizeof(save_summary) + 
 								padded_state_size + 
-								event_size +
+								padded_resource_keys_size +
+								padded_event_size +
 								timestamp_size;
 		assert(size_t(total_size) == total_size);
 		char *buf = (char*)malloc(static_cast<size_t>(total_size));
@@ -8860,14 +8986,17 @@ void save_vrstate_to_file(vr_state_tracker_t h, const char *filename, bool binar
 		h->summary_size = sizeof(save_summary);
 		h->state_offset = sizeof(save_summary) + h->summary_offset;
 		h->state_size = state_size;
-		
+
+		h->resource_keys_offset = h->state_offset + padded_state_size;
+		h->resource_keys_size = resource_keys_size;
+
 		h->event_count = num_events;
 		h->event_size = event_size;
-		h->event_offset = sizeof(header) + padded_state_size;
+		h->event_offset = h->resource_keys_offset + padded_resource_keys_size;
 
 		h->timestamp_count = num_timestamps;
 		h->timestamp_size = timestamp_size;
-		h->timestamp_offset = h->event_offset + h->event_size;
+		h->timestamp_offset = h->event_offset + padded_event_size;
 
 		//
 		// write summary
@@ -8883,9 +9012,13 @@ void save_vrstate_to_file(vr_state_tracker_t h, const char *filename, bool binar
 		// 
 		EncodeStream state_stream(buf + h->state_offset, state_size, false);
 		encoder_visitor encoder(&state_stream);
-		traverse_history_graph_sequential(encoder, s, null_interfaces);
+		traverse_history_graph_sequential(encoder, s);
 
 		//
+		// write resource keys
+		//
+		s->additional_resource_keys.Encode(buf+h->resource_keys_offset, resource_keys_size);
+
 		// write events
 		// 
 		EncodeStream event_stream(buf + h->event_offset, event_size, false);
@@ -8949,6 +9082,9 @@ vr_state_tracker_t load_vrstate_from_file(const char *filename)
 			openvr_broker::open_vr_interfaces null_interfaces;
 			openvr_broker::acquire_interfaces("null", &null_interfaces, nullptr);
 			traverse_history_graph_sequential(decoder, s, null_interfaces);
+
+			// read the resource keys
+			s->additional_resource_keys.Decode(buf + h->resource_keys_offset, h->resource_keys_size);
 
 			// read the events
 			EncodeStream event_stream(buf + h->event_offset, h->event_size, false);

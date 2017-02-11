@@ -1,4 +1,4 @@
-﻿
+﻿#pragma once
 // expected behaviour
 // at startup
 //	base_snapshot = take_snapshot(timestamp);
@@ -82,7 +82,9 @@
 //		figure out how the caller can rewind as well
 //		event stepping
 //	
-// money is in process. make this invaluable for a developer
+// money is in process. 
+//		make this invaluable for a developer
+//      make this invaluable for platform people
 //
 //
 
@@ -173,6 +175,7 @@ vr_state_tracker_t create_vr_state_tracker(TrackerConfig c = { 0.1f, 100.0f, 0.0
 void capture_vr_state(vr_state_tracker_t h,
 						openvr_broker::open_vr_interfaces &interfaces);
 
+// return the first and last frames in the current tracker state
 void get_frame_range(vr_state_tracker_t, int *first_frame, int *last_frame);
 
 void capture_vr_event(vr_state_tracker_t h, const vr::VREvent_t &event);
@@ -182,9 +185,6 @@ void capture_vr_overlay_event(vr_state_tracker_t h, vr::VROverlayHandle_t overla
 // explicit tracking adds
 //void add_tracking_on_resource(resource_directory, resource_filename);
 //void add_tracking_on_args(resource_directory, resource_filename);
-
-
-
 
 void dump_vr_history(vr_state_tracker_t h);
 void dump_vr_state(vr_state_tracker_t h, openvr_broker::open_vr_interfaces &interfaces);
