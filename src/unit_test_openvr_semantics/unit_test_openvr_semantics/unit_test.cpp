@@ -171,7 +171,7 @@ private:
 
 void run_audit_test()
 {
-
+	printf("starting raw vs cursor test\n");
 	const char *overlay_keys[] = {
 		"a","b","c"
 	};
@@ -201,51 +201,78 @@ void run_audit_test()
 	CursorBasedInterface cursor;
 	cursor.Init(c, raw.Get());
 
+	bool read_only = false;
+	bool interactive = false;
+	bool large_time_gap_override = false;
 	InterfaceAuditor auditor;
-	auditor.AuditInterfaces(&raw, &cursor, c);
+	auditor.AuditInterfaces(&raw, &cursor, c, read_only, large_time_gap_override, interactive);
+	auditor.PrintResults();
 }
 
 void chain_cursor_object_test()
 {
+	printf("starting chained object test\n");
+
 	FileBasedInterface cursorA;
-	cursorA.Init("c:\\vr_streams\\unit_test.bin");
+	cursorA.Init("c:\\vr_streams\\unit_test1.bin");
+	uint32_t wa;
+	uint32_t ha;
+	cursorA.Get().sysi->GetRecommendedRenderTargetSize(&wa, &ha);
 
 	TrackerConfig c;
 	c.set_default();
 	CursorBasedInterface cursorB;
 	cursorB.Init(c, cursorA.Get());
+	cursorB.Refresh();
+	uint32_t wb;
+	uint32_t hb;
+	cursorB.Get().sysi->GetRecommendedRenderTargetSize(&wb, &hb);
+
+	// check that the chain is working for at least one test point
+	assert(wa == wb);
+	assert(ha == hb);
 
 	InterfaceAuditor auditor;
-	auditor.AuditInterfaces(&cursorA, &cursorB, c);
-
+	bool read_only = true;
+	bool interactive = false;
+	bool large_time_gap_override = false;
+	auditor.AuditInterfaces(&cursorA, &cursorB, c, read_only, large_time_gap_override, interactive);
+	auditor.PrintResults();
 }
 
 void run_serialization_test()
 {
+	printf("starting saved object vs raw test\n");
 	TrackerConfig c;
 	c.set_default();
 
 	RawInterface raw;
 	raw.Init();
 
-	CursorBasedInterface cursorA;
+	CursorBasedInterface cursorA;	// cursor A is attached to a Raw Source - so it will wobble
 	cursorA.Init(c, raw.Get());
 	cursorA.SaveToFile("c:\\vr_streams\\unit_test.bin", true);
+	
+	cursorA.Refresh();
+	cursorA.SaveToFile("c:\\vr_streams\\unit_test1.bin", true);  // save to a file
 
 	FileBasedInterface fileA;
-	fileA.Init("c:\\vr_streams\\unit_test.bin");
+	fileA.Init("c:\\vr_streams\\unit_test1.bin");  // load the file
 
-	
+	bool read_only = true;
+	bool interactive = false;
+	bool large_time_gap_override = true;
 	InterfaceAuditor auditor;
-	auditor.AuditInterfaces(&cursorA, &fileA, c);
-
+	auditor.AuditInterfaces(&cursorA, &fileA, c, read_only, large_time_gap_override, interactive);
+	auditor.PrintResults();
 }
 
 int main()
 {
+	run_audit_test();
 	chain_cursor_object_test();
 	run_serialization_test();
-	run_audit_test();
+	
 	return 0;
 }
 

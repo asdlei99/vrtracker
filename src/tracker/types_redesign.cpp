@@ -5010,12 +5010,13 @@ static void visit_per_controller_state(visitor_fn &visitor,
 	visitor.start_group_node("controller", device_index);
 	LEAF_SCALAR(has_camera, tcw.HasCamera(device_index));
 	
-	if (ss->cameraframetypes.size() < 3)
+	if (ss->cameraframetypes.size() < EVRTrackedCameraFrameType::MAX_CAMERA_FRAME_TYPES)
 	{
-		ss->cameraframetypes.reserve(3);
-		ss->cameraframetypes.emplace_back(allocator);
-		ss->cameraframetypes.emplace_back(allocator);
-		ss->cameraframetypes.emplace_back(allocator);
+		ss->cameraframetypes.reserve(EVRTrackedCameraFrameType::MAX_CAMERA_FRAME_TYPES);
+		for (int i = 0; i < EVRTrackedCameraFrameType::MAX_CAMERA_FRAME_TYPES; i++)
+		{
+			ss->cameraframetypes.emplace_back(allocator);
+		}
 	}
 	START_VECTOR(cameraframetypes);
 	for (int i = 0; i < (int)ss->cameraframetypes.size(); i++)
@@ -5592,7 +5593,8 @@ public:
 		while (iter_ref.eyes.size() < state_ref.eyes.size())
 		{
 			iter_ref.eyes.emplace_back(m_context->m_allocator);
-			while (iter_ref.eyes.back().hidden_meshes.size() < state_ref.eyes.back().hidden_meshes.size())
+			int index = iter_ref.eyes.size()-1;
+			while (iter_ref.eyes.back().hidden_meshes.size() < state_ref.eyes[index].hidden_meshes.size())
 			{
 				iter_ref.eyes.back().hidden_meshes.emplace_back(m_context->m_allocator);
 			}
@@ -5601,7 +5603,8 @@ public:
 		while (iter_ref.controllers.size() < state_ref.controllers.size())
 		{
 			iter_ref.controllers.emplace_back(m_context->m_allocator);
-			while (iter_ref.controllers.back().components.size() < state_ref.controllers.back().components.size())
+			int index = iter_ref.controllers.size()-1;
+			while (iter_ref.controllers.back().components.size() < state_ref.controllers[index].components.size())
 			{
 				iter_ref.controllers.back().components.emplace_back(m_context->m_allocator);
 			}
@@ -6114,8 +6117,16 @@ bool VRSystemCursor::GetControllerState(
 	if (IsValidDeviceIndex(unControllerDeviceIndex) && pControllerState)
 	{
 		SYNC_SYSTEM_STATE(controller_state, controllers[unControllerDeviceIndex].controller_state);
-		*pControllerState = controller_state->val;
-		rc = true;
+		if (controller_state->is_present())
+		{
+			*pControllerState = controller_state->val;
+			rc = true;
+		}
+		else
+		{
+			// 2/12/2017 - even in the false case, he stomps it with zeros
+			memset(pControllerState, 0, sizeof(VRControllerState_t));
+		}
 	}
 	
 	LOG_EXIT_RC(rc, "CppStubGetControllerState");
@@ -6140,6 +6151,12 @@ bool VRSystemCursor::GetControllerStateWithPose(
 			{
 				*pControllerState = controller_state->val;
 			}
+		}
+		else
+		{
+			// 2/12/2017
+			// even it it's not present openvr stomps it:
+			memset(pControllerState, 0, sizeof(*pControllerState));
 		}
 		
 		if (rc == true && pTrackedDevicePose)
@@ -6915,12 +6932,20 @@ bool VRChaperoneSetupCursor::GetWorkingPlayAreaRect(struct vr::HmdQuad_t * rect)
 }
 
 // return semantics with a wrinkle
+
+/** Returns the number of Quads if the buffer points to null. Otherwise it returns Quads
+* into the buffer up to the max specified. */
+
 #define GetWrinkleBounds(param_name)\
 bool rc = false; \
 SYNC_CHAP_SETUP_STATE(param_name, param_name);\
 if (param_name->is_present())\
 {\
-	if (pBuffer == nullptr && !punCount || (punCount && *punCount))\
+	if (!punCount)\
+	{\
+		rc = false;\
+	}\
+	else if (punCount && punCount != 0 && pBuffer == nullptr)\
 	{\
 		rc = false;\
 	}\
@@ -7000,7 +7025,20 @@ bool VRChaperoneSetupCursor::GetLivePhysicalBoundsInfo(struct vr::HmdQuad_t * pB
 class VRCompositorCursor : public VRCompositorCppStub
 {
 public:
-	VRCompositorCursor(CursorContext *context) : m_context(context) 
+
+	CursorContext *m_context;
+	vrstate::compositor_schema &state_ref;
+	vriterator::compositor_schema &iter_ref;
+
+	VRCompositorCursor(CursorContext *context) : 
+		m_context(context),
+		state_ref(m_context->state->compositor_node),
+		iter_ref(m_context->iterators->compositor_node)
+	{
+		SynchronizeChildVectors();
+	}
+
+	void SynchronizeChildVectors()
 	{
 		// synchronize controllers vector
 		while (m_context->iterators->compositor_node.controllers.size() <
@@ -7028,10 +7066,10 @@ public:
 	uint32_t GetVulkanInstanceExtensionsRequired(char * pchValue, uint32_t unBufferSize) override;
 	uint32_t GetVulkanDeviceExtensionsRequired(struct VkPhysicalDevice_T * pPhysicalDevice, char * pchValue, uint32_t unBufferSize) override;
 
-	CursorContext *m_context;
 };
 
 #define SYNC_COMP_STATE(local_name, variable_name) \
+SynchronizeChildVectors();\
 auto local_name ## iter = m_context->iterators->compositor_node.variable_name;\
 update_iter(local_name ## iter,\
 	m_context->state->compositor_node.variable_name,\
@@ -7053,7 +7091,7 @@ vr::EVRCompositorError VRCompositorCursor::GetLastPoses(
 	LOG_ENTRY("CppStubGetLastPoses");
 
 	vr::EVRCompositorError rc = vr::VRCompositorError_None;
-	
+	SynchronizeChildVectors();
 	// rebuild the arrays from the controllers
 	for (int i = 0; 
 		i < (int)unRenderPoseArrayCount && 
@@ -7100,7 +7138,7 @@ vr::EVRCompositorError VRCompositorCursor::GetLastPoseForTrackedDeviceIndex(
 	LOG_ENTRY("CppStubGetLastPoseForTrackedDeviceIndex");
 
 	vr::EVRCompositorError rc = vr::VRCompositorError_None;
-
+	SynchronizeChildVectors();
 	if (unDeviceIndex >= m_context->iterators->compositor_node.controllers.size())
 	{
 		rc = VRCompositorError_IndexOutOfRange;
@@ -7820,14 +7858,20 @@ public:
 		state_ref(m_context->state->rendermodels_node),
 		iter_ref(m_context->iterators->rendermodels_node)
 	{
-		// synchronize rendermodel_schema vector
-		for (int model_index = 0; model_index < (int)state_ref.models.size(); model_index++)
+		SynchronizeChildVectors();
+	}
+
+
+	void SynchronizeChildVectors()
+	{
+		while (iter_ref.models.size() < state_ref.models.size())
 		{
 			iter_ref.models.emplace_back(m_context->m_allocator);
-			while (iter_ref.models[model_index].components.size() < (int)state_ref.models[model_index].components.size())
+			int model_index = iter_ref.models.size()-1;
+			while (iter_ref.models.back().components.size() < (int)state_ref.models[model_index].components.size())
 			{
-				iter_ref.models[model_index].components.emplace_back(m_context->m_allocator);
-			}
+				iter_ref.models.back().components.emplace_back(m_context->m_allocator);
+			}				
 		}
 	}
 
@@ -7867,6 +7911,7 @@ public:
 };
 
 #define SYNC_RENDERMODELS_STATE(local_name, variable_name) \
+SynchronizeChildVectors();\
 auto local_name ## iter = iter_ref.variable_name;\
 update_iter(local_name ## iter,\
 	state_ref.variable_name,\
@@ -7878,6 +7923,7 @@ auto & local_name = local_name ## iter.item;
 // TODO: also the syncing of vectors (SynchronizeChildVectors()) between state and cursor is also a common pattern
 bool VRRenderModelsCursor::GetIndexForRenderModelName(const char *pchRenderModelName, int *index)
 {
+	SynchronizeChildVectors();
 	bool rc = false;
 	for (int i = 0; i < (int)iter_ref.models.size(); i++)
 	{
@@ -7985,7 +8031,7 @@ vr::EVRRenderModelError VRRenderModelsCursor::LoadTexture_Async(
 	{
 		return vr::VRRenderModelError_InvalidArg;
 	}
-
+	SynchronizeChildVectors();
 	vr::EVRRenderModelError rc;
 	int index = (int)textureId - 1000;
 	if (index >= 0 && index < (int)iter_ref.models.size())
@@ -8048,6 +8094,7 @@ uint32_t VRRenderModelsCursor::GetRenderModelName(
 	LOG_ENTRY("CppStubGetRenderModelName");
 
 	uint32_t rc = 0; 
+	SynchronizeChildVectors();
 	if (unRenderModelIndex < iter_ref.models.size())
 	{
 		SYNC_RENDERMODELS_STATE(model, models[unRenderModelIndex].render_model_name);
@@ -8063,6 +8110,7 @@ uint32_t VRRenderModelsCursor::GetRenderModelName(
 uint32_t VRRenderModelsCursor::GetRenderModelCount()
 {
 	LOG_ENTRY("CppStubGetRenderModelCount");
+	SynchronizeChildVectors();
 	uint32_t rc = iter_ref.models.size();
 	LOG_EXIT_RC(rc, "CppStubGetRenderModelCount");
 }
@@ -8181,6 +8229,7 @@ bool VRRenderModelsCursor::GetComponentState(
 {
 	LOG_ENTRY("CppStubGetComponentState");
 	bool rc = false;
+	SynchronizeChildVectors();
 	if (pchRenderModelName && pchComponentName && pControllerState && pState && pComponentState)
 	{
 		// TODO / Review the following after its up and running and think if there is a better way
@@ -8452,13 +8501,17 @@ public:
 		state_ref(m_context->state->trackedcamera_node),
 		iter_ref(m_context->iterators->trackedcamera_node)
 	{
-		for (int controller_index = 0; controller_index < (int)state_ref.controllers.size(); controller_index++)
+		SynchronizeChildVectors();
+	}
+
+	void SynchronizeChildVectors()
+	{
+		while (iter_ref.controllers.size() < state_ref.controllers.size())
 		{
 			iter_ref.controllers.emplace_back(m_context->m_allocator);
-			for (int frame_type_index = 0; frame_type_index < (int)state_ref.controllers[controller_index].cameraframetypes.size();
-				frame_type_index++)
+			for (int frame_type_index = 0; frame_type_index < EVRTrackedCameraFrameType::MAX_CAMERA_FRAME_TYPES; frame_type_index++)
 			{
-				iter_ref.controllers[controller_index].cameraframetypes.emplace_back(m_context->m_allocator);
+				iter_ref.controllers.back().cameraframetypes.emplace_back(m_context->m_allocator);
 			}
 		}
 	}
@@ -8492,7 +8545,7 @@ vr::EVRTrackedCameraError VRTrackedCameraCursor::HasCamera(vr::TrackedDeviceInde
 
 	vr::EVRTrackedCameraError rc; 
 	bool has_camera_ret = false;
-
+	SynchronizeChildVectors();
 	if (nDeviceIndex < iter_ref.controllers.size())
 	{
 		SYNC_TRACKEDCAMERA_STATE(has_camera, controllers[nDeviceIndex].has_camera);
@@ -8522,6 +8575,7 @@ vr::EVRTrackedCameraError VRTrackedCameraCursor::GetCameraFrameSize(
 	LOG_ENTRY("CursorGetCameraFrameSize");
 
 	vr::EVRTrackedCameraError rc;
+	SynchronizeChildVectors();
 	if (nDeviceIndex < iter_ref.controllers.size())
 	{
 		SYNC_TRACKEDCAMERA_STATE(size, controllers[nDeviceIndex].cameraframetypes[(int)eFrameType].frame_size);
@@ -8554,6 +8608,7 @@ vr::EVRTrackedCameraError VRTrackedCameraCursor::GetCameraIntrinsics(
 {
 	LOG_ENTRY("CursorGetCameraIntrinsics");
 	vr::EVRTrackedCameraError rc;
+	SynchronizeChildVectors();
 	if (nDeviceIndex < iter_ref.controllers.size())
 	{
 		SYNC_TRACKEDCAMERA_STATE(intrinsics, controllers[nDeviceIndex].cameraframetypes[(int)eFrameType].intrinsics);
@@ -8578,6 +8633,7 @@ vr::EVRTrackedCameraError VRTrackedCameraCursor::GetCameraProjection(vr::Tracked
 {
 	LOG_ENTRY("CursorGetCameraProjection");
 	vr::EVRTrackedCameraError rc;
+	SynchronizeChildVectors();
 	if (nDeviceIndex < iter_ref.controllers.size())
 	{
 		SYNC_TRACKEDCAMERA_STATE(projection, controllers[nDeviceIndex].cameraframetypes[(int)eFrameType].projection);

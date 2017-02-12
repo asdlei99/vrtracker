@@ -9,24 +9,48 @@
 #include "openvr_broker.h"
 #include "dprintf.h"
 
+InterfaceAuditor::InterfaceAuditor()
+{
+	num_passes = 0;
+	num_failures = 0;
+	num_waivers = 0;
+}
+
+void InterfaceAuditor::PrintResults()
+{
+	dprintf(" %d passes\n", num_passes);
+	dprintf(" %d waives\n", num_waivers);
+	dprintf(" %d failures\n", num_failures);
+}
+
 void InterfaceAuditor::ReportFailure(const char *string, const char *file, int line)
 {
 	dprintf("%s %s %d\n", string, file, line);
 }
 
-void InterfaceAuditor::AuditInterfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c, bool do_interactive)
+void InterfaceAuditor::ReportWaive(const char *string, const char *desc, const char *file, int line)
+{
+//	dprintf("waive %s\n", desc);
+}
+
+void InterfaceAuditor::AuditInterfaces(
+	OpenVRInterfaceUnderTest *ia, 
+	OpenVRInterfaceUnderTest *ib, const TrackerConfig &c, 
+	bool read_only_tests,
+	bool large_time_gap_override,
+	bool do_interactive)
 {
 	ia->Refresh();
 	ib->Refresh();
 	compare_sysi_interfaces(ia, ib, c);
 	compare_appi_interfaces(ia, ib, c);
-	compare_seti_interfaces(ia, ib, c);
-	compare_chapi_interfaces(ia, ib, c);
-	compare_chapsi_interfaces(ia, ib);
+	compare_seti_interfaces(ia, ib, c, read_only_tests);
+	compare_chapi_interfaces(ia, ib, c, large_time_gap_override, read_only_tests);
+	compare_chapsi_interfaces(ia, ib, read_only_tests);
 	compare_taci_interfaces(ia, ib, c);
 	compare_remi_strange_interfaces(ia, ib);
-	compare_compi_interfaces(ia, ib, c);
-	compare_ovi_interfaces(ia, ib, c);
+	compare_compi_interfaces(ia, ib, c, large_time_gap_override, read_only_tests);
+	compare_ovi_interfaces(ia, ib, c, read_only_tests);
 	compare_exdi_interfaces(ia, ib, c);
 	compare_screeni_interfaces(ia, ib, c);
 	compare_resi_interfaces(ia, ib, c);
@@ -37,11 +61,29 @@ void InterfaceAuditor::AuditInterfaces(OpenVRInterfaceUnderTest *ia, OpenVRInter
 	}
 }
 
+#define WAIVE(cond, note) \
+if (!(cond)) \
+{ \
+ReportWaive(#cond, #note, __FILE__, __LINE__); \
+num_waivers++;\
+} \
+else\
+{\
+	num_passes++;\
+}
+
+
+
 #define ASSERT(cond) \
 if (!(cond)) \
 { \
 ReportFailure(#cond, __FILE__, __LINE__); \
-} 
+num_failures++;\
+} \
+else\
+{\
+	num_passes++;\
+}
 
 template <typename T>
 void uninit(T &ret)
@@ -499,7 +541,10 @@ void InterfaceAuditor::compare_per_overlay_handles(vr::VROverlayHandle_t overlay
 	}
 }
 
-void InterfaceAuditor::compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
+void InterfaceAuditor::compare_ovi_interfaces(
+	OpenVRInterfaceUnderTest *ia, 
+	OpenVRInterfaceUnderTest *ib, const TrackerConfig &c,
+	bool read_only_tests)
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
@@ -591,131 +636,127 @@ void InterfaceAuditor::compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, Open
 		ASSERT(overlay_handle_a == overlay_handle_b);
 	}
 
-	if (a_handles.size() == 0)
+	if (!read_only_tests)
 	{
-		ASSERT(a_handles.size() != 0);
-		return;	// the following tests assume that
-	}
-
-	{
-		// try deleting an existing handle ('a') and query - expect error code
 		{
-			vr::EVROverlayError destroyerrora = a->ovi->DestroyOverlay(a_handles[0]);
+			// try deleting an existing handle ('a') and query - expect error code
+			{
+				vr::EVROverlayError destroyerrora = a->ovi->DestroyOverlay(a_handles[0]);
+				char szbufa[256];
+				uninit(szbufa);
+				vr::EVROverlayError queryerra; uninit(queryerra);
+				uint32_t a_ret = a->ovi->GetOverlayKey(a_handles[0], szbufa, sizeof(szbufa), &queryerra); // should be invalid
+
+				vr::EVROverlayError destroyerrorb = b->ovi->DestroyOverlay(b_handles[0]);
+
+				ia->Refresh();			// give b a chance to notice it's gone
+				ib->Refresh();
+
+				char szbufb[256];
+				uninit(szbufb);
+				vr::EVROverlayError queryerrb; uninit(queryerrb);
+				uint32_t b_ret = b->ovi->GetOverlayKey(b_handles[0], szbufb, sizeof(szbufb), &queryerrb); // should be invalid
+				ASSERT(a_ret == b_ret);
+				ASSERT(queryerra == queryerrb);
+			}
+		}
+
+		{
+			// add it back in
+			vr::VROverlayHandle_t overlay_handle_a; uninit(overlay_handle_a);
+			vr::VROverlayHandle_t overlay_handle_b; uninit(overlay_handle_b);
+			std::string friendly_name = std::string(c.overlay_keys_to_sample[0]) + "friendly";
+			vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys_to_sample[0], friendly_name.c_str(), &overlay_handle_a);
+			vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[0], friendly_name.c_str(), &overlay_handle_b);
+			ASSERT(errora == errorb);
+
+
+			vr::VROverlayHandle_t found_overlay_handle_a; uninit(found_overlay_handle_a);
+			vr::EVROverlayError found_errora = a->ovi->FindOverlay(c.overlay_keys_to_sample[0], &found_overlay_handle_a);
+
+			// give b a chance to detect the new overlay
+			ia->Refresh();
+			ib->Refresh();
+
+			vr::VROverlayHandle_t found_overlay_handle_b; uninit(found_overlay_handle_b);
+			vr::EVROverlayError found_errorb = b->ovi->FindOverlay(c.overlay_keys_to_sample[0], &found_overlay_handle_b);
+			ASSERT(found_errora == found_errorb);
+			ASSERT(found_overlay_handle_a == found_overlay_handle_b);
+
+			a_handles[0] = found_overlay_handle_a;
+			b_handles[0] = found_overlay_handle_b;
+		}
+
+		// check they can find their names
+		for (int i = 0; i < c.num_overlays_to_sample; i++)
+		{
 			char szbufa[256];
 			uninit(szbufa);
-			vr::EVROverlayError queryerra; uninit(queryerra);
-			uint32_t a_ret = a->ovi->GetOverlayKey(a_handles[0], szbufa, sizeof(szbufa), &queryerra); // should be invalid
-
-			vr::EVROverlayError destroyerrorb = b->ovi->DestroyOverlay(b_handles[0]);
-
-			ia->Refresh();			// give b a chance to notice it's gone
-			ib->Refresh();
+			vr::EVROverlayError erra; uninit(erra);
+			uint32_t a_ret = a->ovi->GetOverlayName(a_handles[i], szbufa, sizeof(szbufa), &erra);
 
 			char szbufb[256];
 			uninit(szbufb);
-			vr::EVROverlayError queryerrb; uninit(queryerrb);
-			uint32_t b_ret = b->ovi->GetOverlayKey(b_handles[0], szbufb, sizeof(szbufb), &queryerrb); // should be invalid
+			vr::EVROverlayError errb; uninit(errb);
+			uint32_t b_ret = b->ovi->GetOverlayName(b_handles[i], szbufb, sizeof(szbufb), &errb);
+
+			ASSERT(erra == errb);
+			ASSERT(strcmp(szbufa, szbufb) == 0);
 			ASSERT(a_ret == b_ret);
-			ASSERT(queryerra == queryerrb);
 		}
-	}
 
-	{
-		// add it back in
-		vr::VROverlayHandle_t overlay_handle_a; uninit(overlay_handle_a);
-		vr::VROverlayHandle_t overlay_handle_b; uninit(overlay_handle_b);
-		std::string friendly_name = std::string(c.overlay_keys_to_sample[0]) + "friendly";
-		vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys_to_sample[0], friendly_name.c_str(), &overlay_handle_a);
-		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[0], friendly_name.c_str(), &overlay_handle_b);
-		ASSERT(errora == errorb);
-
-
-		vr::VROverlayHandle_t found_overlay_handle_a; uninit(found_overlay_handle_a);
-		vr::EVROverlayError found_errora = a->ovi->FindOverlay(c.overlay_keys_to_sample[0], &found_overlay_handle_a);
-
-		// give b a chance to detect the new overlay
-		ia->Refresh();
-		ib->Refresh();
-
-		vr::VROverlayHandle_t found_overlay_handle_b; uninit(found_overlay_handle_b);
-		vr::EVROverlayError found_errorb = b->ovi->FindOverlay(c.overlay_keys_to_sample[0], &found_overlay_handle_b);
-		ASSERT(found_errora == found_errorb);
-		ASSERT(found_overlay_handle_a == found_overlay_handle_b);
-
-		a_handles[0] = found_overlay_handle_a;
-		b_handles[0] = found_overlay_handle_b;
-	}
-
-	// check they can find their names
-	for (int i = 0; i < c.num_overlays_to_sample; i++)
-	{
-		char szbufa[256];
-		uninit(szbufa);
-		vr::EVROverlayError erra; uninit(erra);
-		uint32_t a_ret = a->ovi->GetOverlayName(a_handles[i], szbufa, sizeof(szbufa), &erra);
-
-		char szbufb[256];
-		uninit(szbufb);
-		vr::EVROverlayError errb; uninit(errb);
-		uint32_t b_ret = b->ovi->GetOverlayName(b_handles[i], szbufb, sizeof(szbufb), &errb);
-
-		ASSERT(erra == errb);
-		ASSERT(strcmp(szbufa, szbufb) == 0);
-		ASSERT(a_ret == b_ret);
-	}
-
-	// test with no textures assigned
-	{
-		for (int i = 0; i < c.num_overlays_to_sample; i++)
+		// test with no textures assigned
 		{
-			uint32_t aw = 99, ah = 99;
-			vr::EVROverlayError aimg_err = a->ovi->GetOverlayImageData(a_handles[i], nullptr, 0, &aw, &ah);
+			for (int i = 0; i < c.num_overlays_to_sample; i++)
+			{
+				uint32_t aw = 99, ah = 99;
+				vr::EVROverlayError aimg_err = a->ovi->GetOverlayImageData(a_handles[i], nullptr, 0, &aw, &ah);
 
-			uint32_t bw = 99, bh = 99;
-			vr::EVROverlayError bimg_err = b->ovi->GetOverlayImageData(b_handles[i], nullptr, 0, &bw, &bh);
-			ASSERT(aw == bw);
-			ASSERT(ah == bh);
+				uint32_t bw = 99, bh = 99;
+				vr::EVROverlayError bimg_err = b->ovi->GetOverlayImageData(b_handles[i], nullptr, 0, &bw, &bh);
+				ASSERT(aw == bw);
+				ASSERT(ah == bh);
+			}
+		}
+		// test with textures
+		{
+			uint32_t texture_w = 128;
+			uint32_t texture_h = 64;
+			uint32_t depth = 4;
+			uint32_t tex_size = texture_w * texture_h * depth;
+			char *tex = (char *)malloc(tex_size);
+			char *texa = (char *)malloc(tex_size);
+			char *texb = (char *)malloc(tex_size);
+			for (uint32_t i = 0; i < tex_size; i++)
+			{
+				tex[i] = (char)i;
+			}
+
+			for (int i = 0; i < c.num_overlays_to_sample; i++)
+			{
+				vr::EVROverlayError erra = a->ovi->SetOverlayRaw(a_handles[i], tex, texture_w, texture_h, depth);
+				vr::EVROverlayError errb = b->ovi->SetOverlayRaw(b_handles[i], tex, texture_w, texture_h, depth);
+				ia->Refresh();
+				ib->Refresh();
+				uint32_t a_wout; uninit(a_wout);
+				uint32_t a_hout; uninit(a_hout);
+				vr::EVROverlayError geterra = a->ovi->GetOverlayImageData(a_handles[i], texa, tex_size, &a_wout, &a_hout);
+				uint32_t b_wout; uninit(b_wout);
+				uint32_t b_hout; uninit(b_hout);
+				vr::EVROverlayError geterrb = b->ovi->GetOverlayImageData(b_handles[i], texb, tex_size, &b_wout, &b_hout);
+
+				ASSERT(geterra == geterrb);
+				ASSERT(a_wout = b_wout);
+				ASSERT(a_hout = b_hout);
+				ASSERT(memcmp(tex, texa, tex_size) == 0);
+				ASSERT(memcmp(tex, texb, tex_size) == 0);
+			}
+
+			free(tex);
+			free(texa);
+			free(texb);
 		}
 	}
-	// test with textures
-	{
-		uint32_t texture_w = 128;
-		uint32_t texture_h = 64;
-		uint32_t depth = 4;
-		uint32_t tex_size = texture_w * texture_h * depth;
-		char *tex = (char *)malloc(tex_size);
-		char *texa = (char *)malloc(tex_size);
-		char *texb = (char *)malloc(tex_size);
-		for (uint32_t i = 0; i < tex_size; i++)
-		{
-			tex[i] = (char)i;
-		}
-
-		for (int i = 0; i < c.num_overlays_to_sample; i++)
-		{
-			vr::EVROverlayError erra = a->ovi->SetOverlayRaw(a_handles[i], tex, texture_w, texture_h, depth);
-			vr::EVROverlayError errb = b->ovi->SetOverlayRaw(b_handles[i], tex, texture_w, texture_h, depth);
-			ia->Refresh();
-			ib->Refresh();
-			uint32_t a_wout; uninit(a_wout);
-			uint32_t a_hout; uninit(a_hout);
-			vr::EVROverlayError geterra = a->ovi->GetOverlayImageData(a_handles[i], texa, tex_size, &a_wout, &a_hout);
-			uint32_t b_wout; uninit(b_wout);
-			uint32_t b_hout; uninit(b_hout);
-			vr::EVROverlayError geterrb = b->ovi->GetOverlayImageData(b_handles[i], texb, tex_size, &b_wout, &b_hout);
-
-			ASSERT(geterra == geterrb);
-			ASSERT(a_wout = b_wout);
-			ASSERT(a_hout = b_hout);
-			ASSERT(memcmp(tex, texa, tex_size) == 0);
-			ASSERT(memcmp(tex, texb, tex_size) == 0);
-		}
-
-		free(tex);
-		free(texa);
-		free(texb);
-	}
-
 	for (int i = 0; i < c.num_overlays_to_sample; i++)
 	{
 		vr::VROverlayHandle_t handle_a = a_handles[i];
@@ -726,7 +767,8 @@ void InterfaceAuditor::compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, Open
 
 }
 
-void InterfaceAuditor::compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
+void InterfaceAuditor::compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c,
+	bool large_time_gap_override, bool read_only_tests)
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
@@ -774,7 +816,10 @@ void InterfaceAuditor::compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 		timing_b.m_nSize = sizeof(vr::Compositor_FrameTiming);
 		bool rcb = b->compi->GetFrameTiming(&timing_b, c.frame_timing_frames_ago);
 		ASSERT(rca == rcb);
-		ASSERT(softcompare_is_similar(timing_a, timing_b));
+		if (!large_time_gap_override)
+		{
+			ASSERT(softcompare_is_similar(timing_a, timing_b));
+		}
 	}
 
 	{
@@ -793,9 +838,12 @@ void InterfaceAuditor::compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 		uint32_t reta = a->compi->GetFrameTimings(atimings, c.frame_timings_num_frames);
 		uint32_t retb = b->compi->GetFrameTimings(btimings, c.frame_timings_num_frames);
 		ASSERT(reta == retb);
-		for (int i = 0; i < (int)c.frame_timings_num_frames; i++)
+		if (!large_time_gap_override)
 		{
-			ASSERT(softcompare_is_similar(atimings[i], btimings[i]));
+			for (int i = 0; i < (int)c.frame_timings_num_frames; i++)
+			{
+				ASSERT(softcompare_is_similar(atimings[i], btimings[i]));
+			}
 		}
 		free(atimings);
 		free(btimings);
@@ -806,7 +854,10 @@ void InterfaceAuditor::compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 		ib->Refresh();
 		float aret = a->compi->GetFrameTimeRemaining();
 		float bret = b->compi->GetFrameTimeRemaining();
-		ASSERT(softcompare_is_similar(aret, bret, 0.5f));
+		if (!large_time_gap_override)
+		{
+			ASSERT(softcompare_is_similar(aret, bret, 0.5f));
+		}
 	}
 
 	{
@@ -878,7 +929,10 @@ void InterfaceAuditor::compare_compi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 	}
 }
 
-void InterfaceAuditor::compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
+void InterfaceAuditor::compare_chapi_interfaces(
+	OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, 
+	const TrackerConfig &c,
+	bool large_time_gap_override, bool read_only_tests)
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
@@ -924,8 +978,11 @@ void InterfaceAuditor::compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 		vr::HmdColor_t camera_b; uninit(camera_b);
 		b->chapi->GetBoundsColor(color_array_b, c.num_bounds_colors, c.collision_bounds_fade_distance, &camera_b);
 
-		ASSERT(softcompare_is_similar(color_array_a, color_array_b, c.num_bounds_colors, 0.01f));
-		ASSERT(softcompare_is_similar(camera_a, camera_b, 0.01f));
+		if (!large_time_gap_override)
+		{
+			ASSERT(softcompare_is_similar(color_array_a, color_array_b, c.num_bounds_colors, 0.01f));
+			ASSERT(softcompare_is_similar(camera_a, camera_b, 0.01f));
+		}
 
 		free(color_array_a);
 		free(color_array_b);
@@ -937,6 +994,7 @@ void InterfaceAuditor::compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 		ASSERT(rca == rcb);
 	}
 
+	if (!read_only_tests)
 	{
 		a->chapi->ForceBoundsVisible(true);
 		b->chapi->ForceBoundsVisible(true);
@@ -961,7 +1019,8 @@ void InterfaceAuditor::compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 	}
 }
 
-void InterfaceAuditor::compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib)
+void InterfaceAuditor::compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib,
+	bool read_only_tests)
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
@@ -985,25 +1044,27 @@ void InterfaceAuditor::compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, O
 		ASSERT(sizeza == sizezb);
 		ASSERT(working_rectb == working_recta);
 
+		if (!read_only_tests)
+		{
+			a->chapsi->SetWorkingPlayAreaSize(20.0f, 40.0f);
+			b->chapsi->SetWorkingPlayAreaSize(20.0f, 40.0f);
 
-		a->chapsi->SetWorkingPlayAreaSize(20.0f, 40.0f);
-		b->chapsi->SetWorkingPlayAreaSize(20.0f, 40.0f);
+			ia->Refresh();
+			ib->Refresh();
+			float sizexaa; uninit(sizexaa);
+			float sizezaa; uninit(sizezaa);
+			bool rcaa = a->chapsi->GetWorkingPlayAreaSize(&sizexaa, &sizezaa);
 
-		ia->Refresh();
-		ib->Refresh();
-		float sizexaa; uninit(sizexaa);
-		float sizezaa; uninit(sizezaa);
-		bool rcaa = a->chapsi->GetWorkingPlayAreaSize(&sizexaa, &sizezaa);
+			float sizexbb; uninit(sizexbb);
+			float sizezbb; uninit(sizezbb);
+			bool rcbb = b->chapsi->GetWorkingPlayAreaSize(&sizexbb, &sizezbb);
 
-		float sizexbb; uninit(sizexbb);
-		float sizezbb; uninit(sizezbb);
-		bool rcbb = b->chapsi->GetWorkingPlayAreaSize(&sizexbb, &sizezbb);
-
-		ASSERT(rcaa == rcbb);
-		ASSERT(sizexaa == sizexbb);
-		ASSERT(sizezaa == sizezbb);
-		ASSERT(sizexaa == 20.0f);	// if this fails check your vrheadset
-		ASSERT(sizezbb == 40.0f);
+			ASSERT(rcaa == rcbb);
+			ASSERT(sizexaa == sizexbb);
+			ASSERT(sizezaa == sizezbb);
+			ASSERT(sizexaa == 20.0f);	// if this fails check your vrheadset
+			ASSERT(sizezbb == 40.0f);
+		}
 	}
 
 
@@ -1031,9 +1092,15 @@ void InterfaceAuditor::compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, O
 		ASSERT(memcmp(&standing2rawa, &standing2rawb, sizeof(standing2rawa)) == 0);
 	}
 
-	for (int i = 0; i < 2; i++)
+
+	int num_iterations = 2;
+	if (read_only_tests)
 	{
-		if (i == 1)
+		num_iterations = 1;
+	}
+	for (int i = 0; i < num_iterations; i++)
+	{
+		if (i == 1)	// write test
 		{
 			vr::HmdQuad_t quad;
 			memset(&quad, 0, sizeof(quad));	// this is the test
@@ -1047,47 +1114,35 @@ void InterfaceAuditor::compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, O
 		uint32_t quads_countb; uninit(quads_countb);
 		bool rcb = b->chapsi->GetWorkingCollisionBoundsInfo(nullptr, &quads_countb);
 		ASSERT(rca == rcb);
-
-		if (rca)
-		{
-			vr::HmdQuad_t *quadsa = (vr::HmdQuad_t *)calloc(quads_counta, sizeof(vr::HmdQuad_t));
-			bool rca1 = a->chapsi->GetWorkingCollisionBoundsInfo(quadsa, &quads_counta);
-			vr::HmdQuad_t *quadsb = (vr::HmdQuad_t *)calloc(quads_countb, sizeof(vr::HmdQuad_t));
-			bool rcb1 = b->chapsi->GetWorkingCollisionBoundsInfo(quadsb, &quads_countb);
-			ASSERT(rca1 == rcb1);
-			ASSERT(quads_counta == quads_countb);
-			free(quadsa);
-			free(quadsb);
-		}
 	}
 
 	{
 		uint32_t quad_counta = 0; // test zero
 		bool rca = a->chapsi->GetLiveCollisionBoundsInfo(nullptr, &quad_counta);
+		uint32_t quad_countb = 0; // test zero
+		bool rcb = b->chapsi->GetLiveCollisionBoundsInfo(nullptr, &quad_countb);
+		ASSERT(rca == rcb);
+		WAIVE(quad_counta == quad_countb, "live collision bounds info is wacky");
 
 		// insane count and nullptr
 		uint32_t quad_countaa = 99;
-		bool rca1 = b->chapsi->GetLiveCollisionBoundsInfo(nullptr, &quad_countaa);
-
-		vr::HmdQuad_t *quadsa = (vr::HmdQuad_t *)calloc(quad_counta, sizeof(vr::HmdQuad_t));
-
-		bool rcaa = a->chapsi->GetLiveCollisionBoundsInfo(quadsa, &quad_counta); // this function seems foobared - does not return count
-
-		uint32_t quad_countb = 0; // test zero
-		bool rcb = b->chapsi->GetLiveCollisionBoundsInfo(nullptr, &quad_countb);
-
-		// give an insane count and nullptr 
+		bool rcaa = a->chapsi->GetLiveCollisionBoundsInfo(nullptr, &quad_countaa);
 		uint32_t quad_countbb = 99;
-		bool rcb1 = b->chapsi->GetLiveCollisionBoundsInfo(nullptr, &quad_countbb);
-
-		vr::HmdQuad_t *quadsb = (vr::HmdQuad_t *)calloc(quad_counta, sizeof(vr::HmdQuad_t));
-		bool rcbb = a->chapsi->GetLiveCollisionBoundsInfo(quadsb, &quad_counta);
-
-		ASSERT(rca == rcb);
-		ASSERT(rcaa == rcbb);
+		bool rcbb = b->chapsi->GetLiveCollisionBoundsInfo(nullptr, &quad_countbb);
 		ASSERT(quad_countaa == quad_countbb);
-		ASSERT(quad_counta == quad_countb);
-		ASSERT(memcmp(quadsa, quadsb, (sizeof(vr::HmdQuad_t) * quad_counta)) == 0);
+
+	}
+	{
+		uint32_t count_guess = 1000;
+		vr::HmdQuad_t *quadsa = (vr::HmdQuad_t *)calloc(count_guess, sizeof(vr::HmdQuad_t));
+		bool rcaa = a->chapsi->GetLiveCollisionBoundsInfo(quadsa, &count_guess); 
+
+		count_guess = 1000;
+		vr::HmdQuad_t *quadsb = (vr::HmdQuad_t *)calloc(count_guess, sizeof(vr::HmdQuad_t));
+		bool rcbb = b->chapsi->GetLiveCollisionBoundsInfo(quadsb, &count_guess);
+
+		WAIVE(rcaa == rcbb, "live collision waiver");
+		WAIVE(memcmp(quadsa, quadsb, (sizeof(vr::HmdQuad_t) * count_guess)) == 0, "live collision waiver");
 		free(quadsa);
 		free(quadsb);
 	}
@@ -1155,7 +1210,11 @@ void InterfaceAuditor::compare_chapsi_interfaces(OpenVRInterfaceUnderTest *ia, O
 }
 
 // test settings interfaces by getting and setting values to see that a interfaces behave the same as b interfaces
-void InterfaceAuditor::compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
+void InterfaceAuditor::compare_seti_interfaces(
+	OpenVRInterfaceUnderTest *ia, 
+	OpenVRInterfaceUnderTest *ib, 
+	const TrackerConfig &c,
+	bool read_only_tests)
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
@@ -1182,47 +1241,50 @@ void InterfaceAuditor::compare_seti_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		ASSERT(fa == fb);
 		ASSERT(errora == errorb);
 
-		// change it
-		float new_val = fa + 1.0f;
+		if (!read_only_tests)
+		{
+			// change it
+			float new_val = fa + 1.0f;
 
-		vr::EVRSettingsError write1errora; uninit(write1errora);
-		vr::EVRSettingsError write1errorb; uninit(write1errorb);
-		a->seti->SetFloat(vr::k_pch_SteamVR_Section, key, new_val, &write1errora);
-		b->seti->SetFloat(vr::k_pch_SteamVR_Section, key, new_val, &write1errorb);	// writes to stub
-		ia->Refresh();
-		ib->Refresh();
-		// read it again
-		vr::EVRSettingsError read1errora; uninit(read1errora);
-		vr::EVRSettingsError read1errorb; uninit(read1errorb);
-		float fa1 = a->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read1errora);
-		float fb1 = b->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read1errorb);	// reads from snapshot of a
+			vr::EVRSettingsError write1errora; uninit(write1errora);
+			vr::EVRSettingsError write1errorb; uninit(write1errorb);
+			a->seti->SetFloat(vr::k_pch_SteamVR_Section, key, new_val, &write1errora);
+			b->seti->SetFloat(vr::k_pch_SteamVR_Section, key, new_val, &write1errorb);	// writes to stub
+			ia->Refresh();
+			ib->Refresh();
+			// read it again
+			vr::EVRSettingsError read1errora; uninit(read1errora);
+			vr::EVRSettingsError read1errorb; uninit(read1errorb);
+			float fa1 = a->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read1errora);
+			float fb1 = b->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read1errorb);	// reads from snapshot of a
 
 
-																						// write the old version back
-		vr::EVRSettingsError write2errora; uninit(write2errora);
-		vr::EVRSettingsError write2errorb; uninit(write2errorb);
-		a->seti->SetFloat(vr::k_pch_SteamVR_Section, key, fa, &write2errora);
-		b->seti->SetFloat(vr::k_pch_SteamVR_Section, key, fa, &write2errorb);	// writes to stub
-		ia->Refresh();
-		ib->Refresh();
+																							// write the old version back
+			vr::EVRSettingsError write2errora; uninit(write2errora);
+			vr::EVRSettingsError write2errorb; uninit(write2errorb);
+			a->seti->SetFloat(vr::k_pch_SteamVR_Section, key, fa, &write2errora);
+			b->seti->SetFloat(vr::k_pch_SteamVR_Section, key, fa, &write2errorb);	// writes to stub
+			ia->Refresh();
+			ib->Refresh();
 
-		vr::EVRSettingsError read2errora; uninit(read2errora);
-		vr::EVRSettingsError read2errorb; uninit(read2errorb);
-		// check it again
-		float finala = a->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read2errora);
-		float finalb = b->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read2errorb);	// reads from snapshot of a
+			vr::EVRSettingsError read2errora; uninit(read2errora);
+			vr::EVRSettingsError read2errorb; uninit(read2errorb);
+			// check it again
+			float finala = a->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read2errora);
+			float finalb = b->seti->GetFloat(vr::k_pch_SteamVR_Section, key, &read2errorb);	// reads from snapshot of a
 
-		ASSERT(write1errora == write1errorb);
-		ASSERT(read1errora == read1errorb);
-		ASSERT(read1errora == read1errorb);
-		ASSERT(fa1 == fb1);
-		ASSERT(fa1 == new_val);
+			ASSERT(write1errora == write1errorb);
+			ASSERT(read1errora == read1errorb);
+			ASSERT(read1errora == read1errorb);
+			ASSERT(fa1 == fb1);
+			ASSERT(fa1 == new_val);
 
-		ASSERT(write2errora == write2errorb);
-		ASSERT(read2errora == read2errorb);
+			ASSERT(write2errora == write2errorb);
+			ASSERT(read2errora == read2errorb);
 
-		ASSERT(finala == finalb);
-		ASSERT(finala == fa);
+			ASSERT(finala == finalb);
+			ASSERT(finala == fa);
+		}
 	}
 }
 
@@ -1530,6 +1592,9 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
 
+	ia->Refresh();
+	ib->Refresh();
+
 	{
 		uint32_t awidth; uninit(awidth);
 		uint32_t aheight; uninit(aheight);
@@ -1749,9 +1814,9 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 					&posea);
 
 				vr::VRControllerState_t stateb;
+				uninit(stateb);
 				vr::TrackedDevicePose_t poseb;
-				memset(&stateb, 0, sizeof(stateb));
-				memset(&poseb, 0, sizeof(poseb));
+				uninit(poseb);
 				bool retb = b->sysi->GetControllerStateWithPose(
 					vr::ETrackingUniverseOrigin(j),
 					i,
@@ -1778,15 +1843,15 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		bool inputb = b->sysi->IsInputFocusCapturedByAnotherProcess();
 		ASSERT(inputa == inputb);
 	}
-
-	dprintf("ba");
-
 }
 
 void InterfaceAuditor::compare_taci_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)
 {
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
+
+	ia->Refresh();
+	ib->Refresh();
 
 	// pass an invalid interface
 	bool has_cameraa = true;
@@ -1902,7 +1967,6 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 		ASSERT(counta == 66);
 		ASSERT(countb == 77);
 		ASSERT((rca == false) && (rcb == false));
-		dprintf("ba");
 	}
 
 	// passing a 0 and a null gives the required count and a false
@@ -1911,9 +1975,8 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 		bool rca = a->chapsi->GetLiveCollisionBoundsInfo(nullptr, &counta);
 		uint32_t countb = 0;
 		bool rcb = b->chapsi->GetLiveCollisionBoundsInfo(nullptr, &countb);
-		ASSERT(counta == countb);
-		ASSERT((rca == false) && (rcb == false));
-		dprintf("ba");
+		WAIVE(counta == countb, "live collision error handling is wacky");
+		WAIVE((rca == false) && (rcb == false), "live collision error handling is nuts");
 	}
 
 	// here is are valid inputs to LiveCollisionBoundsInfo
@@ -1958,7 +2021,6 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 			uint32_t ba = a->compi->GetVulkanInstanceExtensionsRequired(nullptr, 0);
 			uint32_t bb = b->compi->GetVulkanInstanceExtensionsRequired(nullptr, 0);
 			ASSERT(ba == bb);
-			dprintf("ba");
 		}
 
 		// nullptr test 2
@@ -1966,7 +2028,6 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 			uint32_t ba = a->compi->GetVulkanInstanceExtensionsRequired(nullptr, 42);
 			uint32_t bb = b->compi->GetVulkanInstanceExtensionsRequired(nullptr, 42);
 			ASSERT(ba == bb);
-			dprintf("ba");
 		}
 
 
@@ -1977,7 +2038,6 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 			uint32_t bb = b->compi->GetVulkanInstanceExtensionsRequired(bufb, 256);
 			ASSERT(ba == bb);
 			ASSERT(strcmp(bufa, bufb) == 0);
-			dprintf("ba");
 		}
 	}
 
@@ -1992,6 +2052,8 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 		vr::TrackedDevicePose_t rposesa[16]; uninit(rposesa);
 		vr::TrackedDevicePose_t gposesb[16]; uninit(gposesb);
 		vr::TrackedDevicePose_t rposesb[16]; uninit(rposesb);
+		ia->Refresh();
+		ib->Refresh();
 		vr::EVRCompositorError ba = a->compi->GetLastPoses(rposesa, 1, gposesa, 1);
 		vr::EVRCompositorError bb = b->compi->GetLastPoses(rposesb, 1, gposesb, 1);
 
@@ -2237,8 +2299,6 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 			}
 		}
 	}
-
-	dprintf("bla");
 }
 
 
