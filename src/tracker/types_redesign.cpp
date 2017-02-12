@@ -27,19 +27,12 @@
 #include <imgui.h>
 #endif
 
-#ifdef _WIN32
-// for ::Sleep
-#include <Windows.h>
+
 static void sleep_ms(unsigned long ms)
 {
-	::Sleep(ms);
+	using namespace std::chrono_literals;
+	std::this_thread::sleep_for(1ms);
 }
-#elif defined(POSIX)
-static void sleep_ms(unsigned long ms)
-{
-	usleep(ms * 1000);
-}
-#endif
 
 // coordinate spaces
 // overlays. can be Absolute, TrackedDeviceRelative,SystemOverlay, TrackedComponent
@@ -491,6 +484,12 @@ namespace vrtypes
 			return values.front().val;
 		}
 
+		template<typename... Args>
+		void base_emplace_front(int frame_number, Args&&... args)
+		{
+			values.emplace_front(frame_number, std::forward<Args>(args)...);
+		}
+
 		void dump(std::ostream &ofs, int indent_level)
 		{
 			indented_output(ofs, "history " + std::string(name) + "\n", indent_level);
@@ -518,13 +517,14 @@ namespace vrtypes
 
 		const P& latest_P() const
 		{
-			return values.front().presence;
+			return this->front().presence;
 		}
 
 		template<typename... Args>
 		void emplace_front(int frame_number, P presence, Args&&... args)
 		{
-			values.emplace_front(frame_number, presence, std::forward<Args>(args)...);
+			base_emplace_front(frame_number, presence, std::forward<Args>(args)...);
+			//values.emplace_front();
 		}
 
 	};
@@ -543,7 +543,8 @@ namespace vrtypes
 		template<typename... Args>
 		void emplace_front(int frame_number, Args&&... args)
 		{
-			values.emplace_front(frame_number, std::forward<Args>(args)...);
+			base_emplace_front(frame_number, std::forward<Args>(args)...);
+			//values.emplace_front(frame_number, std::forward<Args>(args)...);
 		}
 
 	};
@@ -554,7 +555,7 @@ namespace vrtypes
 template <typename T, typename P, typename allocatorT>
 struct serializer_base
 {
-	typedef vrtypes::history<T, P, allocatorT> history_scalar_node_type;
+	typedef typename vrtypes::history<T, P, allocatorT> history_scalar_node_type;
 	typedef vrtypes::history<std::vector<T, allocatorT>, P, allocatorT> history_vector_node_type;
 
 	static void encode_history(history_scalar_node_type &h, EncodeStream &e)
@@ -570,7 +571,7 @@ struct serializer_base
 
 		for (auto iter = h.values.begin(); iter != h.values.end(); iter++)
 		{
-			history_scalar_node_type::history_entry &val = *iter;
+			const typename history_scalar_node_type::history_entry &val = *iter;
 			e.memcpy_out_to_stream(&val, sizeof(val));
 		}
 	}
@@ -579,7 +580,7 @@ struct serializer_base
 template <typename T, typename P, typename allocatorT>
 struct serializer : serializer_base<T, P, allocatorT>
 {
-	static void vector_encode_history(history_vector_node_type &h, EncodeStream &e)
+	static void vector_encode_history(typename serializer_base<T, P, allocatorT>::history_vector_node_type &h, EncodeStream &e)
 	{
 		encode(h.name, e);
 		
@@ -606,7 +607,8 @@ struct serializer : serializer_base<T, P, allocatorT>
 			if (inner_entry_count > 0)
 			{
 				// write the simple type
-				e.memcpy_out_to_stream(&history_entry.val[0], sizeof(history_vector_node_type::val_type::value_type) * inner_entry_count); // this will work for all basic types (scalar_history)
+				e.memcpy_out_to_stream(&history_entry.val[0], 
+					sizeof(typename serializer_base<T, P, allocatorT>::history_vector_node_type::val_type::value_type) * inner_entry_count); // this will work for all basic types (scalar_history)
 			}
 		}
 	}
@@ -617,7 +619,7 @@ struct serializer : serializer_base<T, P, allocatorT>
 template <typename T, typename allocatorT>
 struct serializer<T,AlwaysAndForever,allocatorT> : serializer_base<T, AlwaysAndForever, allocatorT>
 {
-	static void vector_encode_history(history_vector_node_type &h, EncodeStream &e)
+	static void vector_encode_history(typename serializer_base<T, AlwaysAndForever, allocatorT>::history_vector_node_type &h, EncodeStream &e)
 	{
 		encode(h.name, e);
 
@@ -643,7 +645,8 @@ struct serializer<T,AlwaysAndForever,allocatorT> : serializer_base<T, AlwaysAndF
 			if (inner_entry_count > 0)
 			{
 				// write the simple type
-				e.memcpy_out_to_stream(&history_entry.val[0], sizeof(history_vector_node_type::val_type::value_type) * inner_entry_count); // this will work for all basic types (scalar_history)
+				e.memcpy_out_to_stream(&history_entry.val[0], 
+					sizeof(typename serializer_base<T, AlwaysAndForever, allocatorT>::history_vector_node_type::val_type::value_type) * inner_entry_count); // this will work for all basic types (scalar_history)
 			}
 		}
 	}
@@ -666,7 +669,7 @@ struct deserializer_base
 		decode(entry_count, e);
 		for (int i = 0; i < entry_count; i++)
 		{
-			history_scalar_node_type::history_entry val;
+			typename history_scalar_node_type::history_entry val;
 			e.memcpy_from_stream(&val, sizeof(val));
 			h.values.emplace_front(val);
 		}
@@ -678,7 +681,10 @@ struct deserializer_base
 template <typename T, typename P, typename allocatorT>
 struct deserializer : public deserializer_base<T,P, allocatorT>
 {
-	static void vector_decode_history(history_vector_node_type &h, EncodeStream &e, allocatorT &allocator)
+	typedef typename deserializer_base<T, P, allocatorT>::history_vector_node_type base_node_type;
+	typedef typename deserializer_base<T, P, allocatorT>::history_vector_node_type::val_type::value_type base_val_type;
+
+	static void vector_decode_history(base_node_type &h, EncodeStream &e, allocatorT &allocator)
 	{
 		char buf[256];
 		decode_str(buf, e);
@@ -701,8 +707,8 @@ struct deserializer : public deserializer_base<T,P, allocatorT>
 
 			// how do I construct a history entry that holds a vector from a  buffer
 			char *raw_char_ptr = &e.encoded_buf[e.buf_pos];
-			history_vector_node_type::val_type::value_type *raw_array = (history_vector_node_type::val_type::value_type *)(raw_char_ptr);
-			e.buf_pos += vec_count * sizeof(history_vector_node_type::val_type::value_type);
+			base_val_type *raw_array = (base_val_type *)(raw_char_ptr);
+			e.buf_pos += vec_count * sizeof(base_val_type);
 
 			// super constructor
 			// emplace a history node:
@@ -725,7 +731,12 @@ struct deserializer : public deserializer_base<T,P, allocatorT>
 template <typename T,typename allocatorT>
 struct deserializer <T, AlwaysAndForever, allocatorT>  : public deserializer_base<T, AlwaysAndForever, allocatorT>
 {
-	static void decode_history(history_scalar_node_type &h, EncodeStream &e, allocatorT &allocator)
+	typedef typename deserializer_base<T, AlwaysAndForever, allocatorT>::history_scalar_node_type base_scalar_node_type;
+
+	typedef typename deserializer_base<T, AlwaysAndForever, allocatorT>::history_vector_node_type base_vector_node_type;
+	typedef typename deserializer_base<T, AlwaysAndForever, allocatorT>::history_vector_node_type::val_type::value_type base_val_type;
+
+	static void decode_history(base_scalar_node_type &h, EncodeStream &e, allocatorT &allocator)
 	{
 		char buf[256];
 		decode_str(buf, e);
@@ -738,14 +749,14 @@ struct deserializer <T, AlwaysAndForever, allocatorT>  : public deserializer_bas
 		decode(entry_count, e);
 		for (int i = 0; i < entry_count; i++)
 		{
-			history_scalar_node_type::history_entry val;
+			typename base_scalar_node_type::history_entry val;
 			e.memcpy_from_stream(&val, sizeof(val));
 			h.values.emplace_front(val);
 		}
 		h.values.reverse();
 	}
 
-	static void vector_decode_history(history_vector_node_type &h, EncodeStream &e, allocatorT &allocator)
+	static void vector_decode_history(base_vector_node_type &h, EncodeStream &e, allocatorT &allocator)
 	{
 		char buf[256];
 		decode_str(buf, e);
@@ -766,9 +777,9 @@ struct deserializer <T, AlwaysAndForever, allocatorT>  : public deserializer_bas
 			decode(vec_count, e);
 			// how do I construct a history entry that holds a vector from a  buffer
 			char *raw_char_ptr = &e.encoded_buf[e.buf_pos];
-			history_vector_node_type::val_type::value_type *raw_array = (history_vector_node_type::val_type::value_type *)(raw_char_ptr);
+			base_val_type *raw_array = (base_val_type *)(raw_char_ptr);
 
-			e.buf_pos += vec_count * sizeof(history_vector_node_type::val_type::value_type);
+			e.buf_pos += vec_count * sizeof(base_val_type);
 
 			// super constructor
 			// emplace a history node:
@@ -886,14 +897,14 @@ struct TMP
 	{
 		assert(0);  // this assert is here to debug problems in uper level code which are not meant to use this
 		s = make_s();
-		memcpy(s, rhs.s, TMP_BUF_BYTES);	// this is nasty because I have no idea how big the actual contents are
+		memcpy(s, rhs.s, StringPool::TMP_BUF_BYTES);	// this is nasty because I have no idea how big the actual contents are
 		p = rhs->p;
 	}
 
 	TMP &operator = (const TMP &rhs)
 	{
 		assert(0); // this assert is here to debug problems in uper level code which are not meant to use this
-		memcpy(s, rhs.s, TMP_BUF_BYTES);
+		memcpy(s, rhs.s, StringPool::TMP_BUF_BYTES);
 		p = rhs->p;
 		return *this;
 	}
@@ -912,10 +923,12 @@ struct TMP
 		clear();
 	}
 
+#if 0
 	void reserve(unsigned int i)
 	{
 		assert(i < size());
 	}
+#endif
 	T *buf()
 	{
 		return s;
@@ -1585,48 +1598,48 @@ struct vrschema
 		std::vector<application_schema, ALLOCATOR_TYPE> applications;
 	};
 
+	template <typename T>
+	struct setting_subtable
+	{
+		setting_subtable(const char *const *tbl_in, int tbl_size_in, ALLOCATOR_DECL)
+			: tbl(tbl_in),
+			tbl_size(tbl_size_in),
+			nodes(allocator)
+		{
+			nodes.reserve(tbl_size);
+			for (int i = 0; i < tbl_size; i++)
+			{
+				// create an entry in the vector table per known property name
+				nodes.emplace_back(tbl[i], allocator);
+			}
+		}
+		const char *const*tbl;
+		const int tbl_size;
+		VSDECL(nodes, EVRSettingsError, T);
+	};
+
+	template <>
+	struct setting_subtable<char>
+	{
+		setting_subtable(const char *const *tbl_in, int tbl_size_in, ALLOCATOR_DECL)
+			: tbl(tbl_in),
+			tbl_size(tbl_size_in),
+			nodes(allocator)
+		{
+			nodes.reserve(tbl_size);
+			for (int i = 0; i < tbl_size; i++)
+			{
+				// create an entry in the vector table per known property name
+				nodes.emplace_back(tbl[i], allocator);
+			}
+		}
+		const char *const*tbl;
+		const int tbl_size;
+		VVDECL(nodes, EVRSettingsError, char);
+	};
+
 	struct settings_schema
 	{
-		template <typename T>
-		struct setting_subtable
-		{
-			setting_subtable(const char *const *tbl_in, int tbl_size_in, ALLOCATOR_DECL)
-				: tbl(tbl_in),
-				tbl_size(tbl_size_in),
-				nodes(allocator)
-			{
-				nodes.reserve(tbl_size);
-				for (int i = 0; i < tbl_size; i++)
-				{
-					// create an entry in the vector table per known property name
-					nodes.emplace_back(tbl[i], allocator);
-				}
-			}
-			const char *const*tbl;
-			const int tbl_size;
-			VSDECL(nodes, EVRSettingsError, T);
-		};
-
-		template <>
-		struct setting_subtable<char>
-		{
-			setting_subtable(const char *const *tbl_in, int tbl_size_in, ALLOCATOR_DECL)
-				: tbl(tbl_in),
-				tbl_size(tbl_size_in),
-				nodes(allocator)
-			{
-				nodes.reserve(tbl_size);
-				for (int i = 0; i < tbl_size; i++)
-				{
-					// create an entry in the vector table per known property name
-					nodes.emplace_back(tbl[i], allocator);
-				}
-			}
-			const char *const*tbl;
-			const int tbl_size;
-			VVDECL(nodes, EVRSettingsError, char);
-		};
-
 		struct section_schema
 		{
 			const char *section_name;
@@ -2875,7 +2888,7 @@ struct ChaperoneWrapper
 		scalar<HmdColor_t> *camera_color)
 	{
 		assert((int)colors->s.max_count() >= num_output_colors);
-		num_output_colors = min(num_output_colors, (int)colors->s.max_count());
+		num_output_colors = std::min(num_output_colors, (int)colors->s.max_count());
 		chapi->GetBoundsColor(colors->s.buf(), num_output_colors, fade_distance, &camera_color->val);
 		colors->count = num_output_colors;
 	}
@@ -2975,7 +2988,7 @@ struct CompositorWrapper
 	inline void GetFrameTimings(uint32_t num_frames, vector_result<Compositor_FrameTiming> *timings)
 	{
 		assert((int)timings->s.max_count() >= num_frames);
-		num_frames = min(num_frames, (int)timings->s.max_count());
+		num_frames = std::min(num_frames, timings->s.max_count());
 		vr::Compositor_FrameTiming *p = timings->s.buf();
 		for (int i = 0; i < (int)num_frames; i++)
 		{
@@ -4479,7 +4492,7 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 }
 
 template <typename visitor_fn, typename T>
-static void visit_subtable(visitor_fn &visitor, vrstate::settings_schema::setting_subtable<T> &subtable, 
+static void visit_subtable(visitor_fn &visitor, vrstate::setting_subtable<T> &subtable, 
 							SettingsWrapper sw, const char *section_name)
 {
 	for (auto iter = subtable.nodes.begin(); iter != subtable.nodes.end(); iter++)
@@ -4502,7 +4515,7 @@ static void visit_subtable(visitor_fn &visitor, vrstate::settings_schema::settin
 template <typename visitor_fn, typename T>
 static void visit_string_subtable(
 									visitor_fn &visitor, 
-									vrstate::settings_schema::setting_subtable<T> &subtable,
+									vrstate::setting_subtable<T> &subtable,
 									SettingsWrapper &wrap, 
 									const char *section_name)
 {
@@ -5388,7 +5401,7 @@ static bool util_vector_to_return_buf_rc(
 
 	if (pRet && unBufferCount > 0 && required_count > 0)
 	{
-		uint32_t bytes_to_write = min(unBufferCount, required_count) * sizeof(T);
+		uint32_t bytes_to_write = std::min(unBufferCount, required_count) * sizeof(T);
 		memcpy(pRet, &p->at(0), bytes_to_write);
 		if (unBufferCount >= required_count)
 		{
@@ -5415,7 +5428,7 @@ bool util_char_to_return_buf_rc(const char *val, size_t required_size, char *pRe
 		}
 		else
 		{
-			uint32_t bytes_to_write = min(unBufferCount, required_size);
+			uint32_t bytes_to_write = std::min(unBufferCount, required_size);
 			memcpy(pRet, val, bytes_to_write);
 			if (bytes_to_write < required_size)
 			{
@@ -5751,8 +5764,8 @@ void VRSystemCursor::GetDeviceToAbsoluteTrackingPose(vr::ETrackingUniverseOrigin
 
 	assert(fPredictedSecondsToPhotonsFromNow == 0);
 
-	unTrackedDevicePoseArrayCount = max(unTrackedDevicePoseArrayCount, vr::k_unMaxTrackedDeviceCount);
-	unTrackedDevicePoseArrayCount = max(unTrackedDevicePoseArrayCount, m_context->state->system_node.controllers.size());
+	unTrackedDevicePoseArrayCount = std::max(unTrackedDevicePoseArrayCount, vr::k_unMaxTrackedDeviceCount);
+	unTrackedDevicePoseArrayCount = std::max(unTrackedDevicePoseArrayCount, m_context->state->system_node.controllers.size());
 
 	if (eOrigin == vr::TrackingUniverseSeated)
 	{
@@ -6835,7 +6848,7 @@ void VRChaperoneCursor::GetBoundsColor(struct vr::HmdColor_t * pOutputColorArray
 		}
 		else
 		{
-			int elements_to_copy = min(nNumOutputColors, (int)bounds_colors->val.size());
+			int elements_to_copy = std::min(nNumOutputColors, (int)bounds_colors->val.size());
 			memcpy(pOutputColorArray, &bounds_colors->val.at(0), sizeof(vr::HmdColor_t) * elements_to_copy);
 			while (elements_to_copy < nNumOutputColors)
 			{
@@ -7152,7 +7165,7 @@ uint32_t VRCompositorCursor::GetFrameTimings(struct vr::Compositor_FrameTiming *
 	SYNC_COMP_STATE(frame_timings, frame_timings);
 	if (pTiming && frame_timings->is_present() && frame_timings->val.size() > 0)
 	{
-		nFrames = min(frame_timings->val.size(), nFrames);
+		nFrames = std::min(frame_timings->val.size(), nFrames);
 		memcpy(pTiming, &frame_timings->val.at(0), sizeof(vr::Compositor_FrameTiming)*nFrames);
 		rc = nFrames;
 	}
@@ -8203,7 +8216,7 @@ bool VRRenderModelsCursor::GetComponentState(
 			int best_controller_index = controller_indices[0];
 			if (controller_indices.size() > 1)
 			{
-				int best_score = MAXINT;
+				int best_score = std::numeric_limits<int>::max();
 				for (int i = 0; i < (int)controller_indices.size() && best_score != 0; i++)
 				{
 					int controller_index = controller_indices[i];
@@ -10289,7 +10302,7 @@ struct timeline_grid
 		});
 #endif
 
-		int visible_rows = min(max_visible_rows, (int)pane_nodes_with_data_in_range.size() - visible_row_start);
+		int visible_rows = std::min(max_visible_rows, (int)pane_nodes_with_data_in_range.size() - visible_row_start);
 		std::vector<grid_node*> pane_nodes;
 		pane_nodes.reserve(visible_rows);
 		for (int i = visible_row_start; i < (int)pane_nodes_with_data_in_range.size()

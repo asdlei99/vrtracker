@@ -944,7 +944,7 @@ void InterfaceAuditor::compare_chapi_interfaces(OpenVRInterfaceUnderTest *ia, Op
 		vr::HmdColor_t camera_b; uninit(camera_b);
 		b->chapi->GetBoundsColor(color_array_b, c.num_bounds_colors, c.collision_bounds_fade_distance, &camera_b);
 
-		ASSERT(softcompare_is_similar(color_array_a, color_array_b, c.num_bounds_colors, 0.01f));
+		ASSERT(softcompare_is_similar(color_array_a, color_array_b, c.num_bounds_colors, 0.05f));
 		ASSERT(softcompare_is_similar(camera_a, camera_b, 0.01f));
 		free(color_array_a);
 		free(color_array_b);
