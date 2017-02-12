@@ -79,6 +79,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>OPENVR_STRINGS_DISABLE_PASSTHRU;HAVE_OPEN_VR_RAW;HAVE_IMG_GUI;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..;..\..\externals\gl3w\include;..\..\externals\pcre2-10.22\cmake-sean;$(OPENVR_BASE)/headers;$(OPENVR_BASE)/samples;C:\projects\vrstrings\headers;..\..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>

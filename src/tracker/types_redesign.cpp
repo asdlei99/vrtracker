@@ -351,15 +351,16 @@ namespace vrtypes
 
 		template<typename... Args>
 		history_entry_base(int frame_number_in, P presence_in, Args&&... args)
-			: presence(presence_in),
+			: 
 			frame_number(frame_number_in),
+			presence(presence_in),
 			val(std::forward<Args>(args)...)
 		{
 		}
 		history_entry_base(int frame_number_in, P presence_in, const T& val_in)
 			:
-			presence(presence_in),
 			frame_number(frame_number_in),
+			presence(presence_in),
 			val(val_in)
 		{}
 
@@ -523,7 +524,7 @@ namespace vrtypes
 		template<typename... Args>
 		void emplace_front(int frame_number, P presence, Args&&... args)
 		{
-			base_emplace_front(frame_number, presence, std::forward<Args>(args)...);
+			history_base<T, P, AllocatorT>::base_emplace_front(frame_number, presence, std::forward<Args>(args)...);
 			//values.emplace_front();
 		}
 
@@ -543,7 +544,7 @@ namespace vrtypes
 		template<typename... Args>
 		void emplace_front(int frame_number, Args&&... args)
 		{
-			base_emplace_front(frame_number, std::forward<Args>(args)...);
+			history_base<T, AlwaysAndForever, AllocatorT>::base_emplace_front(frame_number, std::forward<Args>(args)...);
 			//values.emplace_front(frame_number, std::forward<Args>(args)...);
 		}
 
@@ -1433,8 +1434,8 @@ struct vrschema
 		system_controller_schema(ALLOCATOR_DECL)
 			:
 			INIT(raw_tracking_pose),
-			INIT(standing_tracking_pose),
 			INIT(seated_tracking_pose),
+			INIT(standing_tracking_pose),
 			INIT(activity_level),
 			INIT(controller_role),
 			INIT(device_class),
@@ -1618,10 +1619,9 @@ struct vrschema
 		VSDECL(nodes, EVRSettingsError, T);
 	};
 
-	template <>
-	struct setting_subtable<char>
+	struct setting_subtable_string
 	{
-		setting_subtable(const char *const *tbl_in, int tbl_size_in, ALLOCATOR_DECL)
+		setting_subtable_string(const char *const *tbl_in, int tbl_size_in, ALLOCATOR_DECL)
 			: tbl(tbl_in),
 			tbl_size(tbl_size_in),
 			nodes(allocator)
@@ -1638,26 +1638,26 @@ struct vrschema
 		VVDECL(nodes, EVRSettingsError, char);
 	};
 
+	struct section_schema
+	{
+		const char *section_name;
+		setting_subtable<bool>		bool_settings;
+		setting_subtable_string		string_settings;
+		setting_subtable<float>		float_settings;
+		setting_subtable<int32_t>	int32_settings;
+
+		section_schema(const section_def_t& def, ALLOCATOR_DECL)
+			:
+			section_name(def.section_name),
+			bool_settings(def.bool_settings_ary, def.bool_size, allocator),
+			string_settings(def.stri_settings_ary, def.stri_size, allocator),
+			float_settings(def.floa_settings_ary, def.floa_size, allocator),
+			int32_settings(def.int32_settings_ary, def.int3_size, allocator)
+		{}
+	};
+
 	struct settings_schema
 	{
-		struct section_schema
-		{
-			const char *section_name;
-			setting_subtable<bool>		bool_settings;
-			setting_subtable<char>		string_settings;
-			setting_subtable<float>		float_settings;
-			setting_subtable<int32_t>	int32_settings;
-
-			section_schema(const section_def_t& def, ALLOCATOR_DECL)
-				:
-				section_name(def.section_name),
-				bool_settings(def.bool_settings_ary, def.bool_size, allocator),
-				string_settings(def.stri_settings_ary, def.stri_size, allocator),
-				float_settings(def.floa_settings_ary, def.floa_size, allocator),
-				int32_settings(def.int32_settings_ary, def.int3_size, allocator)
-			{}
-		};
-
 		settings_schema(ALLOCATOR_DECL)
 			:sections(allocator)
 		{
@@ -2675,45 +2675,35 @@ struct SystemWrapper
 		return make_scalar(sysi->IsTrackedDeviceConnected(unDeviceIndex));
 	}
 
-	template <typename T>
-	inline scalar_result<T, ETrackedPropertyError> GetTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop);
 
-	template <>
-	inline scalar_result<bool, ETrackedPropertyError> GetTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop)
+	inline void GetTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop, 
+							scalar_result<bool, ETrackedPropertyError> *result)
 	{
-		scalar_result<bool, ETrackedPropertyError> result;
-		result.val = sysi->GetBoolTrackedDeviceProperty(unDeviceIndex, prop, &result.result_code);
-		return result;
+		result->val = sysi->GetBoolTrackedDeviceProperty(unDeviceIndex, prop, &result->result_code);
 	}
-
-	template <>
-	inline scalar_result<float, ETrackedPropertyError> GetTrackedDeviceProperty<float>(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop)
+	
+	inline void GetTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop,
+			scalar_result<float, ETrackedPropertyError> *result)			
 	{
-		scalar_result<float, ETrackedPropertyError> result;
-		result.val = sysi->GetFloatTrackedDeviceProperty(unDeviceIndex, prop, &result.result_code);
-		return result;
+		result->val = sysi->GetFloatTrackedDeviceProperty(unDeviceIndex, prop, &result->result_code);
 	}
 
-	template <>
-	inline scalar_result<int32_t, ETrackedPropertyError> GetTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop)
+	inline void GetTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop,
+		scalar_result<int32_t, ETrackedPropertyError> *result)
 	{
-		scalar_result<int32_t, ETrackedPropertyError> result;
-		result.val = sysi->GetInt32TrackedDeviceProperty(unDeviceIndex, prop, &result.result_code);
-		return result;
+		result->val = sysi->GetInt32TrackedDeviceProperty(unDeviceIndex, prop, &result->result_code);
 	}
-	template <>
-	inline scalar_result<uint64_t, ETrackedPropertyError> GetTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop)
+
+	inline void GetTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop,
+		 scalar_result<uint64_t, ETrackedPropertyError> *result)
 	{
-		scalar_result<uint64_t, ETrackedPropertyError> result;
-		result.val = sysi->GetUint64TrackedDeviceProperty(unDeviceIndex, prop, &result.result_code);
-		return result;
+		result->val = sysi->GetUint64TrackedDeviceProperty(unDeviceIndex, prop, &result->result_code);
 	}
-	template <>
-	inline scalar_result<HmdMatrix34_t, ETrackedPropertyError> GetTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop)
+
+	inline void GetTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop,
+		scalar_result<HmdMatrix34_t, ETrackedPropertyError> *result)
 	{
-		scalar_result<HmdMatrix34_t, ETrackedPropertyError> result;
-		result.val = sysi->GetMatrix34TrackedDeviceProperty(unDeviceIndex, prop, &result.result_code);
-		return result;
+		result->val = sysi->GetMatrix34TrackedDeviceProperty(unDeviceIndex, prop, &result->result_code);
 	}
 
 	inline void GetStringTrackedDeviceProperty(TrackedDeviceIndex_t unDeviceIndex, ETrackedDeviceProperty prop, 
@@ -2784,24 +2774,16 @@ struct ApplicationsWrapper
 		return result;
 	}
 
-	template <typename T>
-	inline scalar_result<T, vr::EVRApplicationError> GetProperty(const char *appkey, EVRApplicationProperty prop);
-	
-
-	template <>
-	inline scalar_result<bool, EVRApplicationError> GetProperty(const char *appkey, EVRApplicationProperty prop)
+	inline void  GetProperty(const char *appkey, EVRApplicationProperty prop,
+		scalar_result<bool, EVRApplicationError> *result)
 	{
-		scalar_result<bool, EVRApplicationError> result;
-		result.val = appi->GetApplicationPropertyBool(appkey, prop, &result.result_code);
-		return result;
+		result->val = appi->GetApplicationPropertyBool(appkey, prop, &result->result_code);
 	}
 	
-	template <>
-	inline scalar_result<uint64_t, EVRApplicationError> GetProperty(const char *appkey, EVRApplicationProperty prop)
+	inline void GetProperty(const char *appkey, EVRApplicationProperty prop,
+		scalar_result<uint64_t, EVRApplicationError>*result)
 	{
-		scalar_result<uint64_t, EVRApplicationError> result;
-		result.val = appi->GetApplicationPropertyUint64(appkey, prop, &result.result_code);
-		return result;
+		result->val = appi->GetApplicationPropertyUint64(appkey, prop, &result->result_code);
 	}
 
 	inline void GetStringProperty(const char *appkey, EVRApplicationProperty prop,
@@ -2820,38 +2802,26 @@ struct SettingsWrapper
 		: setti(setti_in), string_pool(string_pool_in)
 	{}
 
-	template <typename T>
-	inline scalar_result<T, EVRSettingsError> GetSetting(const char *pchSection, const char *pchSettingsKey);
-
-	template <>
-	inline scalar_result<bool, EVRSettingsError> GetSetting(const char *pchSection, const char *pchSettingsKey)
+	
+	inline void GetSetting(const char *pchSection, const char *pchSettingsKey, scalar_result<bool, EVRSettingsError> *result)
 	{
-		scalar_result<bool, EVRSettingsError> result;
-		result.val = setti->GetBool(pchSection, pchSettingsKey, &result.result_code);
-		return result;
+		result->val = setti->GetBool(pchSection, pchSettingsKey, &result->result_code);
 	}
 
-	template <>
-	inline scalar_result<float, EVRSettingsError> GetSetting(const char *pchSection, const char *pchSettingsKey)
+	inline void GetSetting(const char *pchSection, const char *pchSettingsKey, scalar_result<float, EVRSettingsError> *result)
 	{
-		scalar_result<float, EVRSettingsError> result;
-		result.val = setti->GetFloat(pchSection, pchSettingsKey, &result.result_code);
-		return result;
+		result->val = setti->GetFloat(pchSection, pchSettingsKey, &result->result_code);
 	}
 
-	template <>
-	inline scalar_result<int32_t, EVRSettingsError> GetSetting(const char *pchSection, const char *pchSettingsKey)
+	inline void GetSetting(const char *pchSection, const char *pchSettingsKey, scalar_result<int32_t, EVRSettingsError> *result)
 	{
-		scalar_result<int32_t, EVRSettingsError> result;
-		result.val = setti->GetInt32(pchSection, pchSettingsKey, &result.result_code);
-		return result;
+		result->val = setti->GetInt32(pchSection, pchSettingsKey, &result->result_code);
 	}
 
-	inline vector_result<char, EVRSettingsError> GetStringSetting(const char *pchSection, const char *pchSettingsKey)
+	inline void GetStringSetting(const char *pchSection, const char *pchSettingsKey,
+		vector_result<char, EVRSettingsError> *result)
 	{
-		vector_result<char, EVRSettingsError> result(string_pool);
-		query_vector_rcvoid(&result, setti, &IVRSettings::GetString, pchSection, pchSettingsKey);
-		return result;
+		query_vector_rcvoid(result, setti, &IVRSettings::GetString, pchSection, pchSettingsKey);
 	}
 
 	IVRSettings *setti;
@@ -3872,8 +3842,8 @@ visitor.end_vector(#vector_name, ss->vector_name)
 #define LEAF_SCALAR(member_name, wrapper_call)\
 if (visitor.visit_openvr())\
 {\
-	decltype(wrapper_call) member_name(wrapper_call); \
-	visitor.visit_node(ss->member_name.item, member_name);\
+	decltype(wrapper_call) member_name_temporaryX(wrapper_call); \
+	visitor.visit_node(ss->member_name.item, member_name_temporaryX);\
 }\
 else\
 {\
@@ -3919,10 +3889,11 @@ static void visit_properties(visitor_fn &visitor,
 	for (int i = 0; i < sub_table.tbl_size; i++)
 	{
 		auto &node = sub_table.props[i];
-		scalar_result<T, ETrackedPropertyError> result;
 		if (visitor.visit_openvr())
 		{
-			result = sysw.GetTrackedDeviceProperty<T>(device_index, sub_table.tbl[i].enum_val);
+			
+			scalar_result<T, ETrackedPropertyError> result;
+			sysw.GetTrackedDeviceProperty(device_index, sub_table.tbl[i].enum_val, &result);
 			visitor.visit_node(node.item, result);
 		}
 		else
@@ -3943,7 +3914,7 @@ static void visit_properties(visitor_fn &visitor,
 		scalar_result<T, EVRApplicationError> result;
 		if (visitor.visit_openvr())
 		{
-			result = appw.GetProperty<T>(app_key, sub_table.tbl[i].enum_val);
+			appw.GetProperty(app_key, sub_table.tbl[i].enum_val, &result);
 			visitor.visit_node(node.item, result);
 		}
 		else
@@ -4276,7 +4247,6 @@ static void visit_system_node(
 		START_VECTOR(eyes);
 		for (int i = 0; i < 2; i++)
 		{
-			vrstate::eye_schema *es = &ss->eyes[i];
 			vr::EVREye eEye = (i == 0) ? vr::Eye_Left : vr::Eye_Right;
 			visit_eye_state(visitor, &ss->eyes[i], eEye, sysi, sysw, resource_keys, allocator);
 		}
@@ -4390,9 +4360,9 @@ void visit_application_state(visitor_fn &visitor, vrstate::application_schema *s
 		int count;
 		app_key = helper->get_key_for_index(app_index, &count);
 		visitor.visit_node(ss->application_key.item, app_key, count);
-		scalar<uint32_t> process_id = wrap.GetApplicationProcessId(app_key);
-		LEAF_SCALAR(process_id, process_id);
-		LEAF_VECTOR0(application_launch_arguments, wrap.GetApplicationLaunchArguments(process_id.val));
+		scalar<uint32_t> process_id_tmp = wrap.GetApplicationProcessId(app_key);
+		LEAF_SCALAR(process_id, process_id_tmp);
+		LEAF_VECTOR0(application_launch_arguments, wrap.GetApplicationLaunchArguments(process_id_tmp.val));
 	}
 	else
 	{
@@ -4502,7 +4472,7 @@ static void visit_subtable(visitor_fn &visitor, vrstate::setting_subtable<T> &su
 		{
 			// the name of the node is the setting name
 			const char *setting_name = iter->item.name;
-			result = sw.GetSetting<T>(section_name, setting_name);
+			sw.GetSetting(section_name, setting_name,&result);
 			visitor.visit_node(iter->item, result);
 		}
 		else
@@ -4512,23 +4482,27 @@ static void visit_subtable(visitor_fn &visitor, vrstate::setting_subtable<T> &su
 	}
 }
 
-template <typename visitor_fn, typename T>
+template <typename visitor_fn>
 static void visit_string_subtable(
 									visitor_fn &visitor, 
-									vrstate::setting_subtable<T> &subtable,
+									vrstate::setting_subtable_string &subtable,
 									SettingsWrapper &wrap, 
 									const char *section_name)
 {
-	for (auto iter = subtable.nodes.begin(); iter != subtable.nodes.end(); iter++)
+	if (visitor.visit_openvr())
 	{
-		if (visitor.visit_openvr())
+		vector_result<char, EVRSettingsError> result(wrap.string_pool);
+		for (auto iter = subtable.nodes.begin(); iter != subtable.nodes.end(); iter++)
 		{
 			// the name of the node is the setting name
 			const char *setting_name = iter->item.name;
-			vector_result<char, EVRSettingsError> result = wrap.GetStringSetting(section_name, setting_name);
+			wrap.GetStringSetting(section_name, setting_name, &result);
 			visitor.visit_node(iter->item, result.s.buf(), result.result_code, result.count);
 		}
-		else
+	}
+	else
+	{
+		for (auto iter = subtable.nodes.begin(); iter != subtable.nodes.end(); iter++)
 		{
 			visitor.visit_node(iter->item);
 		}
@@ -4538,7 +4512,7 @@ static void visit_string_subtable(
 template <typename visitor_fn>
 static void visit_section(
 							visitor_fn &visitor, 
-							vrstate::settings_schema::section_schema *s,
+							vrstate::section_schema *s,
 							SettingsWrapper &wrap)
 {
 	visit_subtable<visitor_fn, bool>(visitor, s->bool_settings, wrap, s->section_name);
@@ -5001,6 +4975,8 @@ static const char *FrameTypeToGroupName(EVRTrackedCameraFrameType f)
 		case VRTrackedCameraFrameType_Distorted:	return "distorted";
 		case VRTrackedCameraFrameType_Undistorted: return "undistorted";
 		case VRTrackedCameraFrameType_MaximumUndistorted: return "max_undistorted";
+		case MAX_CAMERA_FRAME_TYPES:
+			assert(0);
 	}
 	return "unknown";
 }
@@ -5451,15 +5427,12 @@ bool util_char_to_return_buf_rc(const char *val, size_t required_size, char *pRe
 
 // specialized for char to terminate the buffer
 template <>
-static bool util_vector_to_return_buf_rc<char>(
+bool util_vector_to_return_buf_rc<char>(
 	std::vector<char, ALLOCATOR_TYPE> *p,
 	char *pRet,
 	uint32_t unBufferCount,
 	uint32_t *rc)
 {
-	uint32_t required_size = p->size(); // size to hold the string including the trailing null
-										// note that p is not an 'std::string' its a vector and it include the trailing null
-
 	assert(p->size() == 0 || p->at(p->size() - 1) == 0); // (proof that p always has the trailing null)
 
 	char *ptr = nullptr;
@@ -5631,23 +5604,25 @@ public:
 		}
 	}
 
-	bool VRSystemCursor::IsValidDeviceIndex(vr::TrackedDeviceIndex_t unDeviceIndex);
+	bool IsValidDeviceIndex(vr::TrackedDeviceIndex_t unDeviceIndex);
 };
 
 bool VRSystemCursor::IsValidDeviceIndex(vr::TrackedDeviceIndex_t unDeviceIndex)
 {
-	if (unDeviceIndex >= 0 && unDeviceIndex <= m_context->state->system_node.controllers.size())
+	if (unDeviceIndex <= m_context->state->system_node.controllers.size())
 		return true;
 	else
 		return false;
 }
 
+#define ITER_NAME(local_name) local_name ## _iter
+
 #define SYNC_SYSTEM_STATE(local_name, variable_name) \
-auto local_name ## iter = iter_ref.variable_name;\
-update_iter(local_name ## iter,\
+auto ITER_NAME(local_name) = iter_ref.variable_name;\
+update_iter(ITER_NAME(local_name),\
 	state_ref.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = ITER_NAME(local_name).item;
 
 void VRSystemCursor::GetRecommendedRenderTargetSize(uint32_t * pnWidth, uint32_t * pnHeight)
 {
@@ -5818,8 +5793,6 @@ uint32_t VRSystemCursor::GetSortedTrackedDeviceIndicesOfClass(
 	LOG_ENTRY("CppStubGetSortedTrackedDeviceIndicesOfClass");
 
 	unsigned int spatial_sort_index = unRelativeToTrackedDeviceIndex + 1;
-
-	TrackedDeviceIndex_t *indices = nullptr;
 	uint32_t count = 0;
 
 	switch (eTrackedDeviceClass)
@@ -6290,7 +6263,7 @@ auto local_name ## iter = m_context->iterators->applications_node.variable_name;
 update_iter(local_name ## iter,\
 	m_context->state->applications_node.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = local_name ## iter.item;
 
 bool VRApplicationsCursor::GetInternalIndexForAppKey(const char *key, int *index_ret)
 {
@@ -6788,7 +6761,7 @@ auto local_name ## iter = m_context->iterators->chaperone_node.variable_name;\
 update_iter(local_name ## iter,\
 	m_context->state->chaperone_node.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = local_name ## iter.item;
 
 vr::ChaperoneCalibrationState VRChaperoneCursor::GetCalibrationState()
 {
@@ -6889,7 +6862,7 @@ auto local_name ## iter = m_context->iterators->chaperone_setup_node.variable_na
 update_iter(local_name ## iter,\
 	m_context->state->chaperone_setup_node.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = local_name ## iter.item;
 
 bool VRChaperoneSetupCursor::GetWorkingPlayAreaSize(float * pSizeX, float * pSizeZ)
 {
@@ -7045,7 +7018,7 @@ auto local_name ## iter = m_context->iterators->compositor_node.variable_name;\
 update_iter(local_name ## iter,\
 	m_context->state->compositor_node.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = local_name ## iter.item;
 
 vr::ETrackingUniverseOrigin VRCompositorCursor::GetTrackingSpace()
 {
@@ -7364,7 +7337,7 @@ auto local_name ## iter = iter_ref.variable_name;\
 update_iter(local_name ## iter,\
 	state_ref.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = local_name ## iter.item;
 
 vr::TrackedDeviceIndex_t VROverlayCursor::GetPrimaryDashboardDevice()
 {
@@ -7520,7 +7493,6 @@ EVROverlayError
 VROverlayCursor::GetOverlayFlag(VROverlayHandle_t ulOverlayHandle, VROverlayFlags eOverlayFlag, bool *pbEnabled)
 {
 	EVROverlayError err = vr::VROverlayError_UnknownOverlay;
-	bool rc = 0; 
 	int index; 
 	vr::EVROverlayError found_it = GetOverlayIndexForHandle(ulOverlayHandle, &index); 
 	if (found_it == vr::VROverlayError_None)
@@ -7881,7 +7853,7 @@ auto local_name ## iter = iter_ref.variable_name;\
 update_iter(local_name ## iter,\
 	state_ref.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = local_name ## iter.item;
 
 
 // TODO: look for other getindexes and see if there is a collapsible pattern
@@ -8058,7 +8030,7 @@ uint32_t VRRenderModelsCursor::GetRenderModelName(
 	LOG_ENTRY("CppStubGetRenderModelName");
 
 	uint32_t rc = 0; 
-	if (unRenderModelIndex >= 0 && unRenderModelIndex < iter_ref.models.size())
+	if (unRenderModelIndex < iter_ref.models.size())
 	{
 		SYNC_RENDERMODELS_STATE(model, models[unRenderModelIndex].render_model_name);
 		if (model->is_present())
@@ -8102,7 +8074,7 @@ uint32_t VRRenderModelsCursor::GetComponentName(
 	int model_index;
 	if (GetIndexForRenderModelName(pchRenderModelName, &model_index))
 	{
-		if (unComponentIndex >= 0 && unComponentIndex < iter_ref.models[model_index].components.size())
+		if (unComponentIndex < iter_ref.models[model_index].components.size())
 		{
 			SYNC_RENDERMODELS_STATE(component_name, models[model_index].components[unComponentIndex].component_name);
 			util_vector_to_return_buf_rc(&component_name->val, pchComponentName, unComponentNameLen, &rc);
@@ -8160,14 +8132,12 @@ auto local_name ## iter = m_context->iterators->system_node.variable_name;\
 update_iter(local_name ## iter,\
 	m_context->state->system_node.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = local_name ## iter.item;
 
 void VRRenderModelsCursor::GetControllerIndicesMatchingRenderModel(
 	const char *pchRenderModelName, std::vector<int> *controller_indices)
 {
-	vrstate::system_schema		&system_node = m_context->state->system_node;
-	vriterator::system_schema	&system_iter  = m_context->iterators->system_node;
-
+	auto &system_iter = m_context->iterators->system_node;
 	int prop_index = - 1;
 
 	for (int i = 0; i < (int)system_iter.controllers.size(); i++)
@@ -8378,7 +8348,7 @@ auto local_name ## iter = iter_ref.variable_name;\
 update_iter(local_name ## iter,\
 	state_ref.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = local_name ## iter.item;
 
 
 void VRExtendedDisplayCursor::GetWindowBounds(int32_t * pnX, int32_t * pnY, uint32_t * pnWidth, uint32_t * pnHeight)
@@ -8487,7 +8457,7 @@ auto local_name ## iter = iter_ref.variable_name;\
 update_iter(local_name ## iter,\
 	state_ref.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = local_name ## iter.item;
 
 const char * VRTrackedCameraCursor::GetCameraErrorNameFromEnum(vr::EVRTrackedCameraError eCameraError)
 {
@@ -8651,7 +8621,7 @@ auto local_name ## iter = iter_ref.variable_name;\
 update_iter(local_name ## iter,\
 	state_ref.variable_name,\
 	m_context->current_frame);\
-auto & local_name = local_name ## iter ## .item;
+auto & local_name = local_name ## iter.item;
 
 bool VRResourcesCursor::GetIndexForResourceName(const char *pchResourceName, int *index)
 {
@@ -9450,8 +9420,8 @@ struct cached_iterator
 	cached_iterator()
 		:
 		start_frame_id(-1),
-		cache_end_frame_id(-1),
-		cache_start_frame_id(-1)
+		cache_start_frame_id(-1),
+		cache_end_frame_id(-1)
 	{
 	}
 
@@ -9554,21 +9524,21 @@ struct event_node_if : grid_node_data_if
 		: s(s_in)
 	{
 	}
-	virtual const char *GetLabel()
+	virtual const char *GetLabel() override
 	{
 		return "events";
 	}
-	virtual const char *GetLabel(int *size)
+	virtual const char *GetLabel(int *size) override
 	{
 		*size = 6;
 		return "events";
 	}
 
-	virtual const char *GetPopupMenuLabel()
+	virtual const char *GetPopupMenuLabel() override
 	{
 		return "events";
 	}
-	virtual std::string GetChangeDescriptionString()
+	virtual std::string GetChangeDescriptionString() override
 	{
 		if (!s->m_events.empty())
 		{
@@ -9576,12 +9546,12 @@ struct event_node_if : grid_node_data_if
 		}
 		return std::string("");
 	}
-	virtual bool has_changes()
+	virtual bool has_changes() override
 	{
 		return true;
 	}
 
-	virtual bool start_iterator(int start_frame_in, int end_frame_in)
+	virtual bool start_iterator(int start_frame_in, int end_frame_in) override
 	{
 		return c_iter.start_iterator(start_frame_in, end_frame_in, s->m_events.begin(), s->m_events.end());
 	}
@@ -9650,8 +9620,8 @@ struct history_node_if : grid_node_data_if
 	history_node_cos<T, P, AllocatorT > current_cos;	// this is the 'current change of state
 
 	history_node_if(const std::string &path, history_node *base)
-		:	m_path(path),
-			m_history_node(base),
+		:	m_history_node(base),
+			m_path(path),
 			popup_menu_label(base->name)
 	{
 	}
@@ -9677,7 +9647,7 @@ struct history_node_if : grid_node_data_if
 		return m_history_node->more_than_2_values();
 	}
 
-	virtual std::string GetChangeDescriptionString()
+	virtual std::string GetChangeDescriptionString() override
 	{
 		if (!m_history_node->values.empty())
 		{
@@ -9686,7 +9656,7 @@ struct history_node_if : grid_node_data_if
 		return "";
 	}
 
-	virtual bool start_iterator(int start_frame_in, int end_frame_in)
+	virtual bool start_iterator(int start_frame_in, int end_frame_in) override
 	{
 		return c_iter.start_iterator(start_frame_in, end_frame_in, m_history_node->values.begin(), m_history_node->values.end());
 	}
@@ -9941,8 +9911,8 @@ struct FramesWithDataCache
 			if (node->start_iterator(cached_last_frame_id + 1, latest_frame_number) == false)
 			{
 			}
-			change_of_state *change;
-			while (change = node->get_next())
+			change_of_state *change = node->get_next();
+			while (change)
 			{
 				int frame_number = change->GetFrameNumber();
 				auto iter = hits.find(frame_number);
@@ -9950,6 +9920,7 @@ struct FramesWithDataCache
 				{	// unique: add it:
 					hits.insert(iter, frame_number);
 				}
+				change = node->get_next();
 			}
 		}
 
@@ -10053,12 +10024,12 @@ public:
 	ForceRightColumnSetup()
 	{}
 
-	virtual int GetFirstVisibleFrame()
+	virtual int GetFirstVisibleFrame() override
 	{
 		return visible_frames.front();
 	}
 
-	virtual int GetLastVisibleFrame()
+	virtual int GetLastVisibleFrame() override
 	{
 		return visible_frames.back();
 	}
@@ -10067,7 +10038,7 @@ public:
 	{
 		return visible_frames[index];
 	}
-	virtual int GetNumVisibleFrames()
+	virtual int GetNumVisibleFrames() override
 	{
 		return (int)visible_frames.size();
 	}
@@ -10079,7 +10050,7 @@ public:
 	//
 	// update the visible frames caches
 	//
-	void Update(float plot_width, float pixels_per_frame, int last_frame, grid_node_set &nodes)
+	void Update(float plot_width, float pixels_per_frame, int last_frame, grid_node_set &nodes) override
 	{
 		// clear the old states because we will reset them 
 		visible_frames.clear();		
@@ -10101,11 +10072,11 @@ public:
 template <size_t count>
 void strcpy_safe(char(&s)[count], const char* pSrc)
 {
-#pragma warning(push)
-#pragma warning( disable : 4996)
-strncpy(s, pSrc, count);
-#pragma warning(pop)
-// Ensure null-termination.
+// #pragma warning(push)
+// #pragma warning( disable : 4996)
+	strcpy_s(s, count, pSrc);
+// #pragma warning(pop)
+//// Ensure null-termination.
 s[count-1] = 0;
 }
 
@@ -10318,8 +10289,6 @@ struct timeline_grid
 		// update visible row start
 		visible_row_start = static_cast<int>(GetScrollY() / line_height);
 		
-		bool freeze_selected = false;
-		bool unfreeze_selected = false;
 		float child_start_y = GetScrollY();
 		SetCursorPosY(child_start_y);
 		ImGui::NewLine();
@@ -10330,7 +10299,6 @@ struct timeline_grid
 		for (auto iter = pane_nodes.begin(); iter != pane_nodes.end(); iter++)
 		{
 			grid_node *node = *iter;
-			bool prev = node->label_selected;
 			ImGui::Selectable(node->GetLabel(), &node->label_selected, 0, node->GetTextSize());
 
 			if (IsItemHovered())
@@ -10356,8 +10324,6 @@ struct timeline_grid
 		}
 
 		EndChild();
-
-		float ypos_end_of_list = ImGui::GetCursorPosY();
 
 		// 
 		//BeginChild - main plot area
@@ -10414,7 +10380,6 @@ struct timeline_grid
 			if (column_setup.GetNumVisibleFrames() > 0)
 			{
  				node->start_iterator(column_setup.GetFirstVisibleFrame(), column_setup.GetLastVisibleFrame());
-				int i = 0;
 				while (change_of_state *change = node->get_next())
 				{
 					PushID(change->unique_id());
@@ -10607,7 +10572,7 @@ void destroy_gui_context(gui_context_t g)
 {
 #ifdef HAVE_IMG_GUI
 	vr_gui_context *context = (vr_gui_context *)g;
-	delete g;
+	delete context;
 #endif 
 }
 
