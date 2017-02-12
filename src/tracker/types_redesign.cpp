@@ -27,7 +27,6 @@
 #include <imgui.h>
 #endif
 
-
 static void sleep_ms(unsigned long ms)
 {
 	using namespace std::chrono_literals;
@@ -2024,7 +2023,7 @@ struct vrstate_visitor{};
 
 struct lhs_only_visitor : public vrstate_visitor
 {
-	inline bool visit_openvr() { return false; }
+	inline bool visit_source_interfaces() { return false; }
 #if 0
 	template <typename T, typename P, typename allocatorT>
 	void visit_node(history<std::vector<T, allocatorT>, P, allocatorT> &node, const T *sample_val, int len)
@@ -2083,7 +2082,7 @@ struct update_history_visit_fn : public vrstate_visitor
 	int m_update_counter;
 	int m_visit_counter;
 
-	inline bool visit_openvr() { return true; }
+	inline bool visit_source_interfaces() { return true; }
 	inline bool reload_render_models() { return false; }
 
 	// non leaf.  group is identified by it's name and index
@@ -2299,7 +2298,7 @@ struct img_visit_fn : public lhs_only_visitor
 		pop_group();
 	}
 
-	static bool visit_openvr() { return false; }
+	static bool visit_source_interfaces() { return false; }
 	inline bool reload_render_models() { return true; }
 
 	template <typename T, typename P, typename allocatorT>
@@ -2418,7 +2417,7 @@ struct dump_history_visit_fn : public vrstate_visitor
 	inline void end_vector(const char *vector_name, T &vec)
 	{}
 
-	static bool visit_openvr() { return false; }
+	static bool visit_source_interfaces() { return false; }
 	inline bool reload_render_models() { return true; }
 
 	template <typename T, typename P, typename allocatorT>
@@ -2492,7 +2491,7 @@ struct decoder_visitor : public vrstate_visitor
 	{}
 	decoder_visitor(decoder_visitor&) = delete;
 
-	inline bool visit_openvr() { return false; }
+	inline bool visit_source_interfaces() { return false; }
 	inline bool reload_render_models() { return true; }
 
 	inline void start_group_node(const char *group_id_name, int group_id_index) {}
@@ -3840,7 +3839,7 @@ visitor.end_vector(#vector_name, ss->vector_name)
 
 
 #define LEAF_SCALAR(member_name, wrapper_call)\
-if (visitor.visit_openvr())\
+if (visitor.visit_source_interfaces())\
 {\
 	decltype(wrapper_call) member_name_temporaryX(wrapper_call); \
 	visitor.visit_node(ss->member_name.item, member_name_temporaryX);\
@@ -3853,7 +3852,7 @@ else\
 
 // leaf 0 because there is no presence/error code type
 #define LEAF_VECTOR0(member_name, wrapper_call)\
-if (visitor.visit_openvr())\
+if (visitor.visit_source_interfaces())\
 {\
 	decltype(wrapper_call) member_name(wrapper_call); \
 	visitor.visit_node(ss->member_name.item, member_name.s.buf(), member_name.count);\
@@ -3868,10 +3867,10 @@ else\
 // the first case creates member_name from invoking the wrapper.
 //
 // the second case is broken - to keep the same visit_node() call it creates
-// a fake object - even though that side should never be read (since visit_openvr() is false)
+// a fake object - even though that side should never be read (since visit_source_interfaces() is false)
 //
 #define LEAF_VECTOR1(member_name, wrapper_call)\
-if (visitor.visit_openvr())\
+if (visitor.visit_source_interfaces())\
 {\
 	decltype(wrapper_call) member_name(wrapper_call); \
 	visitor.visit_node(ss->member_name.item, member_name.s.buf(), member_name.result_code, member_name.count);\
@@ -3889,7 +3888,7 @@ static void visit_properties(visitor_fn &visitor,
 	for (int i = 0; i < sub_table.tbl_size; i++)
 	{
 		auto &node = sub_table.props[i];
-		if (visitor.visit_openvr())
+		if (visitor.visit_source_interfaces())
 		{
 			
 			scalar_result<T, ETrackedPropertyError> result;
@@ -3912,7 +3911,7 @@ static void visit_properties(visitor_fn &visitor,
 	{
 		auto &node = sub_table.props[i];
 		scalar_result<T, EVRApplicationError> result;
-		if (visitor.visit_openvr())
+		if (visitor.visit_source_interfaces())
 		{
 			appw.GetProperty(app_key, sub_table.tbl[i].enum_val, &result);
 			visitor.visit_node(node.item, result);
@@ -3929,7 +3928,7 @@ static void visit_string_properties(visitor_fn &visitor,
 	vrstate::properties_subtable<T, vr::EVRApplicationProperty, vr::EVRApplicationError> &sub_table,
 	ApplicationsWrapper wrap, const char *app_key) 
 {
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		vector_result<char, EVRApplicationError> result(wrap.string_pool);
 		for (int i = 0; i < sub_table.tbl_size; i++)
@@ -3954,7 +3953,7 @@ static void visit_string_properties(visitor_fn &visitor,
 	vrstate::properties_subtable<T, vr::TrackedDeviceProperty, vr::ETrackedPropertyError> &sub_table,
 	SystemWrapper wrap, vr::TrackedDeviceIndex_t device_index)
 {
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		vector_result<char, ETrackedPropertyError> result(wrap.string_pool);
 		for (int i = 0; i < sub_table.tbl_size; i++)
@@ -3981,7 +3980,7 @@ static void visit_hidden_mesh(visitor_fn &visitor,
 							EHiddenAreaMeshType mesh_type,
 							IVRSystem *sysi, SystemWrapper wrap)
 {
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		scalar<uint32_t> hidden_mesh_triangle_count;
 		const HmdVector2_t *vertex_data = nullptr;
@@ -4056,7 +4055,7 @@ static void visit_component_on_controller_schema(
 	scalar_result<RenderModel_ComponentState_t,bool> transforms;
 	scalar_result<RenderModel_ComponentState_t, bool> transforms_scroll_wheel;
 
-	if (visitor.visit_openvr() && controller_state.is_present())
+	if (visitor.visit_source_interfaces() && controller_state.is_present())
 	{
 		vector_result<char> component_name(wrap.string_pool);
 		component_name = wrap.GetComponentModelName(render_model_name, component_index);
@@ -4082,7 +4081,7 @@ static void visit_component_on_controller_schema(
 			transforms_scroll_wheel.result_code = false;
 		}
 	}
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		visitor.visit_node(ss->transforms.item, transforms);
 		visitor.visit_node(ss->transforms_scroll_wheel.item, transforms_scroll_wheel);
@@ -4113,7 +4112,7 @@ static void visit_controller_state(visitor_fn &visitor, vrstate::system_controll
 		twrap t("   system_controller_state_with_pose");
 		
 		
-		if (visitor.visit_openvr())
+		if (visitor.visit_source_interfaces())
 		{
 			scalar_result<TrackedDevicePose_t, bool> synced_pose;
 
@@ -4161,7 +4160,7 @@ static void visit_controller_state(visitor_fn &visitor, vrstate::system_controll
 		twrap t("   system_controller_components");
 		vector_result<char, ETrackedPropertyError> render_model(wrap.string_pool);
 		int component_count = 0;
-		if (visitor.visit_openvr())
+		if (visitor.visit_source_interfaces())
 		{
 			wrap.GetStringTrackedDeviceProperty(controller_index, vr::Prop_RenderModelName_String, &render_model);
 			if (render_model.is_present())
@@ -4214,7 +4213,7 @@ static void visit_system_node(
 		LEAF_SCALAR(input_focus_captured_by_other, sysw.IsInputFocusCapturedByAnotherProcess());
 
 		
-		if (visitor.visit_openvr())
+		if (visitor.visit_source_interfaces())
 		{
 			scalar_result<float, bool>		seconds_since_last_vsync;
 			scalar_result<uint64_t, bool>	frame_counter_since_last_vsync;
@@ -4269,7 +4268,7 @@ static void visit_system_node(
 			TrackedDevicePose_t standing_pose_array[vr::k_unMaxTrackedDeviceCount];
 			TrackedDevicePose_t seated_pose_array[vr::k_unMaxTrackedDeviceCount];
 
-			if (visitor.visit_openvr())
+			if (visitor.visit_source_interfaces())
 			{
 				memset(raw_pose_array, 0, sizeof(raw_pose_array));	// 2/6/2017 - on error this stuff should be zero
 				memset(standing_pose_array, 0, sizeof(standing_pose_array));
@@ -4286,7 +4285,7 @@ static void visit_system_node(
 			for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
 			{
 				visitor.start_group_node("controller", i);
-				if (visitor.visit_openvr())
+				if (visitor.visit_source_interfaces())
 				{
 					visitor.visit_node(ss->controllers[i].raw_tracking_pose.item, make_scalar(raw_pose_array[i]));
 					visitor.visit_node(ss->controllers[i].standing_tracking_pose.item, make_scalar(standing_pose_array[i]));
@@ -4317,7 +4316,7 @@ static void visit_system_node(
 	for (unsigned i = 0; i < k_unMaxTrackedDeviceCount + 1; i++)
 	{
 		unsigned unRelativeToTrackedDeviceIndex = -1 + i;
-		if (visitor.visit_openvr())
+		if (visitor.visit_source_interfaces())
 		{
 			vector_result<TrackedDeviceIndex_t> result(sysw.string_pool);
 
@@ -4355,7 +4354,7 @@ void visit_application_state(visitor_fn &visitor, vrstate::application_schema *s
 	visitor.start_group_node("app_state", app_index);
 
 	const char *app_key = nullptr;
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		int count;
 		app_key = helper->get_key_for_index(app_index, &count);
@@ -4387,7 +4386,7 @@ void visit_mime_type_schema(visitor_fn &visitor, vrstate::mime_type_schema *ss,
 	ApplicationsWrapper wrap, uint32_t mime_index)
 {
 	const char *mime_type = mime_types[mime_index].name;
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		visitor.visit_node(ss->mime_type.item, mime_types[mime_index].name, (int)strlen(mime_type) + 1);
 	}
@@ -4407,7 +4406,7 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 {
 	visitor.start_group_node("app", -1);
 
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		std::vector<int> active_indexes;
 		resource_keys.GetApplicationsIndexer().update(&active_indexes, wrap);
@@ -4468,7 +4467,7 @@ static void visit_subtable(visitor_fn &visitor, vrstate::setting_subtable<T> &su
 	for (auto iter = subtable.nodes.begin(); iter != subtable.nodes.end(); iter++)
 	{
 		scalar_result<T, EVRSettingsError> result;
-		if (visitor.visit_openvr())
+		if (visitor.visit_source_interfaces())
 		{
 			// the name of the node is the setting name
 			const char *setting_name = iter->item.name;
@@ -4489,7 +4488,7 @@ static void visit_string_subtable(
 									SettingsWrapper &wrap, 
 									const char *section_name)
 {
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		vector_result<char, EVRSettingsError> result(wrap.string_pool);
 		for (auto iter = subtable.nodes.begin(); iter != subtable.nodes.end(); iter++)
@@ -4548,7 +4547,7 @@ static void visit_chaperone_node(
 		LEAF_SCALAR(play_area_rect, wrap.GetPlayAreaRect());
 		LEAF_SCALAR(play_area_size, wrap.GetPlayAreaSize());
 
-		if (visitor.visit_openvr())
+		if (visitor.visit_source_interfaces())
 		{
 			vector_result<HmdColor_t> colors(wrap.string_pool);
 			scalar<HmdColor_t> camera_color;
@@ -4591,7 +4590,7 @@ static void visit_compositor_controller(visitor_fn &visitor,
 										CompositorWrapper cw, TrackedDeviceIndex_t unDeviceIndex)
 {
 	visitor.start_group_node("controller", unDeviceIndex);
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		scalar_result<TrackedDevicePose_t, EVRCompositorError> last_render_pose;
 		scalar_result<TrackedDevicePose_t, EVRCompositorError> last_game_pose;
@@ -4632,7 +4631,7 @@ static void visit_compositor_state(visitor_fn &visitor,
 		LEAF_SCALAR(should_app_render_with_low_resource, wrap.ShouldAppRenderWithLowResources());
 	}
 
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		vector_result<Compositor_FrameTiming> frame_timings(wrap.string_pool);
 		wrap.GetFrameTimings(config.GetFrameTimingsNumFrames(), &frame_timings);
@@ -4676,7 +4675,7 @@ static void visit_permodelcomponent(
 {
 	visitor.start_group_node("component", component_index);
 	
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		vector_result<char> component_model_name
 				= wrap.GetComponentModelName(pchRenderModelName, component_index);
@@ -4701,7 +4700,7 @@ static void visit_rendermodel(visitor_fn &visitor,
 {
 	
 	visitor.start_group_node("model", unRenderModelIndex);
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		vector_result<char> render_model_name_result(wrap.string_pool);
 		render_model_name_result = wrap.GetRenderModelName(unRenderModelIndex);
@@ -4729,7 +4728,7 @@ static void visit_rendermodel(visitor_fn &visitor,
 	uint16_t unWidth, unHeight; // width and height of the texture map in pixels
 	unWidth = unHeight = 0;
 	const uint8_t *rubTextureMapData=nullptr;
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		if (visitor.reload_render_models() || ss->vertex_data.item.empty())
 		{
@@ -4775,7 +4774,7 @@ static void visit_rendermodel(visitor_fn &visitor,
 
 	// set default
 	int component_count = (int)ss->components.size();
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		component_count = (int)wrap.GetComponentCount(render_model_name);
 		ss->components.reserve(component_count);
@@ -4809,7 +4808,7 @@ static void visit_per_overlay(
 	vrstate::per_overlay_state *ss = &overlay_state->overlays[overlay_index];
 	vr::VROverlayHandle_t handle = 0;
 
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		const std::string &key = config.GetOverlayIndexer().get_overlay_key_for_index(overlay_index);
 		scalar_result<VROverlayHandle_t, EVROverlayError> handle_result = wrap.GetOverlayHandle(key.c_str());
@@ -4865,7 +4864,7 @@ static void visit_per_overlay(
 	LEAF_SCALAR(overlay_texture_size,				wrap.GetOverlayTextureSize(handle));
 	
 
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		scalar_result<TrackedDeviceIndex_t, EVROverlayError> device_index;
 		vector_result<char, EVROverlayError> name(wrap.string_pool);
@@ -4894,7 +4893,7 @@ static void visit_overlay_state(visitor_fn &visitor, vrstate::overlay_schema *ss
 	LEAF_SCALAR(gamepad_focus_overlay, ow.GetGamepadFocusOverlay());
 	LEAF_SCALAR(primary_dashboard_device, ow.GetPrimaryDashboardDevice());
 
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		std::vector<int> active_indexes;
 		
@@ -4938,7 +4937,7 @@ static void visit_rendermodel_state(visitor_fn &visitor, vrstate::rendermodels_s
 {
 	visitor.start_group_node("render_model", -1);
 	
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		scalar<uint32_t> current_rendermodels = rmw.GetRenderModelCount();
 		int num_render_models = current_rendermodels.val;
@@ -5057,7 +5056,7 @@ static void visit_per_resource(visitor_fn &visitor,
 	ALLOCATOR_DECL)
 {
 	visitor.start_group_node("resource", i);
-	if (visitor.visit_openvr())
+	if (visitor.visit_source_interfaces())
 	{
 		int fname_size;
 		const char *fname = resource_keys.GetResourcesIndexer().get_filename_for_index(i, &fname_size);
@@ -5081,6 +5080,8 @@ static void visit_per_resource(visitor_fn &visitor,
 	}
 	else
 	{
+		visitor.visit_node(ss->resources[i].resource_name.item);
+		visitor.visit_node(ss->resources[i].resource_directory.item);
 		visitor.visit_node(ss->resources[i].resource_full_path.item);
 		visitor.visit_node(ss->resources[i].resource_data.item);
 	}
@@ -5223,58 +5224,69 @@ static void traverse_history_graph_sequential(visitor_fn &visitor, tracker *oute
 	TWRAP_NUM_TIMERS = 0;
 #endif
 
+	//if (interfaces.sysi)
 	{
 		twrap t("system_node");
 		visit_system_node(visitor, &s->system_node, interfaces.sysi, system_wrapper, rendermodel_wrapper, 
 							outer_state->additional_resource_keys, allocator);
 	}
 	
+	//if (interfaces.appi)
 	{
 		twrap t("applications_node");
 		visit_applications_node(visitor, &s->applications_node, application_wrapper, outer_state->additional_resource_keys, allocator);
 	}
 	
+	//if (interfaces.seti)
 	{
 		twrap t("settings_node");
 		visit_settings_node(visitor, &s->settings_node, settings_wrapper);
 	}
 
+	//if (interfaces.chapi)
 	{
 		twrap t("chaperone_node");
 		visit_chaperone_node(visitor, &s->chaperone_node, chaperone_wrapper, outer_state->additional_resource_keys);
 	}
 
+	//if (interfaces.chapsi)
 	{
 		twrap t("chaperone_setup_node");
 		visit_chaperone_setup_node(visitor, &s->chaperone_setup_node, chaperone_setup_wrapper);
 	}
 
+	//if (interfaces.compi)
 	{
 		twrap t("compositor_node");
 		visit_compositor_state(visitor, &s->compositor_node, compositor_wrapper, outer_state->additional_resource_keys, allocator);
 	}
 
+	//if (interfaces.ovi)
 	{
 		twrap t("overlay_node");
 		visit_overlay_state(visitor, &s->overlay_node, overlay_wrapper, outer_state->additional_resource_keys, allocator);
 	}
 	
+	//if (interfaces.remi)
 	{
 		twrap t("rendermodels_node");
 		visit_rendermodel_state(visitor, &s->rendermodels_node, rendermodel_wrapper, allocator);
 	}
 
+	//if (interfaces.exdi)
 	{
 		twrap t("extendeddisplay_node");
 		visit_extended_display_state(visitor, &s->extendeddisplay_node, extended_display_wrapper);
 	}
 	
+	//if (interfaces.taci)
 	{
 		twrap t("trackedcamera_node");
 		visit_trackedcamera_state(visitor, &s->trackedcamera_node, tracked_camera_wrapper, 
 										outer_state->additional_resource_keys, allocator);
 	}
 
+	//if (interfaces.resi)
 	{
 		twrap t("resources_node");
 		visit_resources_state(visitor, &s->resources_node, resources_wrapper, outer_state->additional_resource_keys, allocator);
@@ -5362,8 +5374,6 @@ static int util_char_vector_cmp(const char *pch, std::vector<char, ALLOCATOR_TYP
 		return strncmp(pch, &v[0], v.size());
 	}
 }
-
-
 
 template <typename T>
 static bool util_vector_to_return_buf_rc(
@@ -5574,32 +5584,31 @@ public:
 		state_ref(m_context->state->system_node),
 		iter_ref(m_context->iterators->system_node)
 	{
+		SynchronizeChildVectors();
+	}
 
-		// synchronize eyes, controllers/components
-		for (int eyes_index = 0; eyes_index < (int)state_ref.eyes.size(); eyes_index++)
+	void SynchronizeChildVectors()
+	{
+		while (iter_ref.eyes.size() < state_ref.eyes.size())
 		{
 			iter_ref.eyes.emplace_back(m_context->m_allocator);
-			for (int meshes_index = 0;
-				meshes_index < (int)state_ref.eyes[eyes_index].hidden_meshes.size();
-				meshes_index++)
+			while (iter_ref.eyes.back().hidden_meshes.size() < state_ref.eyes.back().hidden_meshes.size())
 			{
-				iter_ref.eyes[eyes_index].hidden_meshes.emplace_back(m_context->m_allocator);
+				iter_ref.eyes.back().hidden_meshes.emplace_back(m_context->m_allocator);
 			}
 		}
 
-		for (int controllers_index = 0; controllers_index < (int)state_ref.controllers.size(); controllers_index++)
+		while (iter_ref.controllers.size() < state_ref.controllers.size())
 		{
 			iter_ref.controllers.emplace_back(m_context->m_allocator);
-			for (int components_index = 0;
-				components_index < (int)state_ref.controllers[controllers_index].components.size();
-				components_index++)
+			while (iter_ref.controllers.back().components.size() < state_ref.controllers.back().components.size())
 			{
-				iter_ref.controllers[controllers_index].components.emplace_back(m_context->m_allocator);
+				iter_ref.controllers.back().components.emplace_back(m_context->m_allocator);
 			}
 		}
 
-		for (int spatial_sorts_index = 0; spatial_sorts_index < (int)state_ref.spatial_sorts.size(); spatial_sorts_index++)
-		{
+		while (iter_ref.spatial_sorts.size() < state_ref.spatial_sorts.size())
+		{ 
 			iter_ref.spatial_sorts.emplace_back(m_context->m_allocator);
 		}
 	}
@@ -5618,6 +5627,7 @@ bool VRSystemCursor::IsValidDeviceIndex(vr::TrackedDeviceIndex_t unDeviceIndex)
 #define ITER_NAME(local_name) local_name ## _iter
 
 #define SYNC_SYSTEM_STATE(local_name, variable_name) \
+SynchronizeChildVectors();\
 auto ITER_NAME(local_name) = iter_ref.variable_name;\
 update_iter(ITER_NAME(local_name),\
 	state_ref.variable_name,\
@@ -6540,10 +6550,18 @@ uint32_t VRApplicationsCursor::GetApplicationLaunchArguments(uint32_t unHandle, 
 	//	uint32_t pid;
 	//	uint32_t unArgsHandle;
 	//};
+	uint32_t rc;
+	if (unArgs > 0)
+	{
+		pchArgs = "";
+		rc = 1;
+	}
+	else
+	{
+		rc = 1;
+	}
 
-
-	assert(0);  // todo after i figure out app launch arguments 
-	uint32_t rc = 2;
+	//assert(0);  // todo after i figure out app launch arguments 
 	LOG_EXIT_RC(rc, "CppStubGetApplicationLaunchArguments");
 }
 
@@ -9748,7 +9766,7 @@ struct grid_visitor
 		m_vec->push_back(node);
 	}
 
-	inline bool visit_openvr() { return false; }
+	inline bool visit_source_interfaces() { return false; }
 	inline bool reload_render_models() { return true; }
 
 	inline void start_group_node(const char *group_id_name, int group_id_index) 
@@ -10144,7 +10162,6 @@ struct vr_gui_context
 		draw_info_dialogs();
 	}
 };
-
 
 struct timeline_grid
 {

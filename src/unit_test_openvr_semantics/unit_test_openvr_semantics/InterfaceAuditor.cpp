@@ -16,6 +16,8 @@ void InterfaceAuditor::ReportFailure(const char *string, const char *file, int l
 
 void InterfaceAuditor::AuditInterfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c, bool do_interactive)
 {
+	ia->Refresh();
+	ib->Refresh();
 	compare_sysi_interfaces(ia, ib, c);
 	compare_appi_interfaces(ia, ib, c);
 	compare_seti_interfaces(ia, ib, c);
@@ -589,25 +591,33 @@ void InterfaceAuditor::compare_ovi_interfaces(OpenVRInterfaceUnderTest *ia, Open
 		ASSERT(overlay_handle_a == overlay_handle_b);
 	}
 
-	// try deleting an existing handle ('a') and query - expect error code
+	if (a_handles.size() == 0)
 	{
-		vr::EVROverlayError destroyerrora = a->ovi->DestroyOverlay(a_handles[0]);
-		char szbufa[256];
-		uninit(szbufa);
-		vr::EVROverlayError queryerra; uninit(queryerra);
-		uint32_t a_ret = a->ovi->GetOverlayKey(a_handles[0], szbufa, sizeof(szbufa), &queryerra); // should be invalid
+		ASSERT(a_handles.size() != 0);
+		return;	// the following tests assume that
+	}
 
-		vr::EVROverlayError destroyerrorb = b->ovi->DestroyOverlay(b_handles[0]);
+	{
+		// try deleting an existing handle ('a') and query - expect error code
+		{
+			vr::EVROverlayError destroyerrora = a->ovi->DestroyOverlay(a_handles[0]);
+			char szbufa[256];
+			uninit(szbufa);
+			vr::EVROverlayError queryerra; uninit(queryerra);
+			uint32_t a_ret = a->ovi->GetOverlayKey(a_handles[0], szbufa, sizeof(szbufa), &queryerra); // should be invalid
 
-		ia->Refresh();			// give b a chance to notice it's gone
-		ib->Refresh();
+			vr::EVROverlayError destroyerrorb = b->ovi->DestroyOverlay(b_handles[0]);
 
-		char szbufb[256];
-		uninit(szbufb);
-		vr::EVROverlayError queryerrb; uninit(queryerrb);
-		uint32_t b_ret = b->ovi->GetOverlayKey(b_handles[0], szbufb, sizeof(szbufb), &queryerrb); // should be invalid
-		ASSERT(a_ret == b_ret);
-		ASSERT(queryerra == queryerrb);
+			ia->Refresh();			// give b a chance to notice it's gone
+			ib->Refresh();
+
+			char szbufb[256];
+			uninit(szbufb);
+			vr::EVROverlayError queryerrb; uninit(queryerrb);
+			uint32_t b_ret = b->ovi->GetOverlayKey(b_handles[0], szbufb, sizeof(szbufb), &queryerrb); // should be invalid
+			ASSERT(a_ret == b_ret);
+			ASSERT(queryerra == queryerrb);
+		}
 	}
 
 	{
@@ -2125,19 +2135,22 @@ void InterfaceAuditor::compare_remi_strange_interfaces(OpenVRInterfaceUnderTest 
 		// load texture from b
 		//
 
-		vr::EVRRenderModelError error_tex_b; uninit(error_tex_b);
-		vr::RenderModel_TextureMap_t *texb = nullptr;
-		error_tex_b = b->remi->LoadTexture_Async(modelb->diffuseTextureId, &texb);
-		while (1)
+		if (modelb)
 		{
+			vr::EVRRenderModelError error_tex_b; uninit(error_tex_b);
+			vr::RenderModel_TextureMap_t *texb = nullptr;
 			error_tex_b = b->remi->LoadTexture_Async(modelb->diffuseTextureId, &texb);
-			if (error_tex_b != vr::VRRenderModelError_Loading)
-				break;
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		}
+			while (1)
+			{
+				error_tex_b = b->remi->LoadTexture_Async(modelb->diffuseTextureId, &texb);
+				if (error_tex_b != vr::VRRenderModelError_Loading)
+					break;
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
 
-		ASSERT(errora == errorb);
-		ASSERT(error_tex_a == error_tex_b);
+			ASSERT(errora == errorb);
+			ASSERT(error_tex_a == error_tex_b);
+		}
 	}
 
 

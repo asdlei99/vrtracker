@@ -103,6 +103,9 @@ static bool acquire_null_interfaces(openvr_broker::open_vr_interfaces *interface
 	interfaces->remi =		nullptr;
 	interfaces->exdi =		nullptr;
 	interfaces->taci =		nullptr;
+	interfaces->screeni = nullptr;
+	interfaces->noti = nullptr; // from openvr.h: This current interface is not yet implemented. Do not use yet.
+	interfaces->resi = nullptr;
 	return true;
 }
 
