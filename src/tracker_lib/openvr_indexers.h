@@ -43,7 +43,17 @@ public:
 		const device_property_row *mat34_properties, int num_mat34_properties,
 		const device_property_row *float_properties, int num_float_properties
 	);
-	
+
+	void AddCustomProperties(
+		int num_bool_properties, const char **bool_names, int *bool_values,
+		int num_string_properties, const char **string_names, int *string_values,
+		int num_uint64_properties, const char **uint64_names, int *uint64_values,
+		int num_int32_properties, const char **int32_names, int *int32_values,
+		int num_mat34_properties, const char **mat34_names, int *mat34_values,
+		int num_float_properties, const char **float_names, int *float_values
+	);
+
+	void AddCustomProperty(PropertySettingType prop_type, const char *name, int val);
 
 	bool GetIndexForEnum(PropertySettingType setting_type, int enum_val, int *index)
 	{
@@ -63,15 +73,36 @@ public:
 	}
 	int GetEnumVal(PropertySettingType setting_type, int index)
 	{
-		return property_table[setting_type][index].enum_val;
+		if (index < default_property_table[setting_type].size)
+			return default_property_table[setting_type].rows[index].enum_val;
+		else
+			return custom_values[setting_type][index - default_property_table[setting_type].size];
 	}
 	const char* GetName(PropertySettingType setting_type, int index)
 	{
-		return property_table[setting_type][index].name;
+		if (index < default_property_table[setting_type].size)
+			return default_property_table[setting_type].rows[index].name;
+		else
+			return custom_names[setting_type][index - default_property_table[setting_type].size].c_str();
 	}
+
+	void WriteToStream(EncodeStream &s);
+	void ReadFromStream(EncodeStream &s);
+
 private:
-	const device_property_row *property_table[NUM_PROP_TYPES];
+	void HashDefaultRows(PropertySettingType setting_type);
+	void AddCustomPropertiesArray(PropertySettingType setting_type, int num, const char **names, int *values);
+
+	struct
+	{
+		const device_property_row *rows;
+		int size;
+	} default_property_table[NUM_PROP_TYPES];
+
 	std::unordered_map<int, int> enum2index[NUM_PROP_TYPES];
+	
+	std::vector<std::string> custom_names[NUM_PROP_TYPES];
+	std::vector<int> custom_values[NUM_PROP_TYPES];
 };
 
 class ApplicationsPropertiesIndexer : public PropertiesIndexer
@@ -85,7 +116,14 @@ public:
 class DevicePropertiesIndexer : public PropertiesIndexer
 {
 public:
-	void Init();
+	void Init(
+		int num_bool_properties,	const char **bool_names,	int *bool_values,
+		int num_string_properties,	const char **string_names,	int *string_values,
+		int num_uint64_properties,	const char **uint64_names,	int *uint64_values,
+		int num_int32_properties,	const char **int32_names,	int *int32_values,
+		int num_mat34_properties,	const char **mat34_names,	int *mat34_values,
+		int num_float_properties,	const char **float_names,	int *float_values
+	);
 	void WriteToStream(EncodeStream &s);
 	void ReadFromStream(EncodeStream &s);
 };

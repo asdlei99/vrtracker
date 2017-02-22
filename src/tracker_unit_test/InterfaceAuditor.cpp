@@ -66,22 +66,22 @@ void InterfaceAuditor::compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 	openvr_broker::open_vr_interfaces *a = &ia->Get();
 	openvr_broker::open_vr_interfaces *b = &ib->Get();
 
-	for (int i = 0; i < c.num_resources_to_sample; i++)
+	for (int i = 0; i < c.num_resources; i++)
 	{
 		char apathbuffer[256];
 		uninit(apathbuffer);
 		{
 			uint32_t aret = a->resi->GetResourceFullPath(
-				c.resource_filenames_to_sample[i],
-				c.resource_directories_to_sample[i],
+				c.resource_filenames[i],
+				c.resource_directories[i],
 				apathbuffer, sizeof(apathbuffer));
 
 			char bpathbuffer[256];
 			uninit(bpathbuffer);
 
 			uint32_t bret = b->resi->GetResourceFullPath(
-				c.resource_filenames_to_sample[i],
-				c.resource_directories_to_sample[i],
+				c.resource_filenames[i],
+				c.resource_directories[i],
 				bpathbuffer, sizeof(bpathbuffer));
 			ASSERT(aret == bret);
 			ASSERT(strcmp(apathbuffer, bpathbuffer) == 0);
@@ -89,7 +89,7 @@ void InterfaceAuditor::compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 
 		{
 			char joinedname[2048];
-			sprintf(joinedname, "%s/%s", c.resource_directories_to_sample[i], c.resource_filenames_to_sample[i]);  //stupid?
+			sprintf(joinedname, "%s/%s", c.resource_directories[i], c.resource_filenames[i]);  //stupid?
 			uint32_t asize = a->resi->LoadSharedResource(joinedname, nullptr, 0);
 
 			uint32_t bsize = b->resi->LoadSharedResource(joinedname, nullptr, 0);
@@ -518,14 +518,14 @@ void InterfaceAuditor::compare_ovi_interfaces(
 	ib->Refresh();
 
 	// create overlays per TrackerConfig
-	for (int i = 0; i < c.num_overlays_to_sample; i++)
+	for (int i = 0; i < c.num_overlays; i++)
 	{
 		vr::VROverlayHandle_t overlay_handle_a; uninit(overlay_handle_a);
-		std::string friendly_name = std::string(c.overlay_keys_to_sample[i]) + "friendly";
-		vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_a);
+		std::string friendly_name = std::string(c.overlay_keys[i]) + "friendly";
+		vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys[i], friendly_name.c_str(), &overlay_handle_a);
 
 		vr::VROverlayHandle_t overlay_handle_b; uninit(overlay_handle_b);
-		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[i], friendly_name.c_str(), &overlay_handle_b);
+		vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys[i], friendly_name.c_str(), &overlay_handle_b);
 		ASSERT(errora == errorb);
 	}
 
@@ -538,13 +538,13 @@ void InterfaceAuditor::compare_ovi_interfaces(
 	std::vector<vr::VROverlayHandle_t> b_handles;
 
 	// find handles for keys
-	for (int i = 0; i < c.num_overlays_to_sample; i++)
+	for (int i = 0; i < c.num_overlays; i++)
 	{
 		vr::VROverlayHandle_t overlay_handle_a; uninit(overlay_handle_a);
-		vr::EVROverlayError errora = a->ovi->FindOverlay(c.overlay_keys_to_sample[i], &overlay_handle_a);
+		vr::EVROverlayError errora = a->ovi->FindOverlay(c.overlay_keys[i], &overlay_handle_a);
 
 		vr::VROverlayHandle_t overlay_handle_b; uninit(overlay_handle_b);
-		vr::EVROverlayError errorb = b->ovi->FindOverlay(c.overlay_keys_to_sample[i], &overlay_handle_b);
+		vr::EVROverlayError errorb = b->ovi->FindOverlay(c.overlay_keys[i], &overlay_handle_b);
 
 		a_handles.push_back(overlay_handle_a);
 		b_handles.push_back(overlay_handle_b);
@@ -555,7 +555,7 @@ void InterfaceAuditor::compare_ovi_interfaces(
 
 	process_overlay_events_on_handles(ia, &a_handles, ib, &b_handles);
 
-	for (int i = 0; i < c.num_overlays_to_sample; i++)
+	for (int i = 0; i < c.num_overlays; i++)
 	{
 		char szbufa[256];
 		uninit(szbufa);
@@ -631,21 +631,21 @@ void InterfaceAuditor::compare_ovi_interfaces(
 			// add it back in
 			vr::VROverlayHandle_t overlay_handle_a; uninit(overlay_handle_a);
 			vr::VROverlayHandle_t overlay_handle_b; uninit(overlay_handle_b);
-			std::string friendly_name = std::string(c.overlay_keys_to_sample[0]) + "friendly";
-			vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys_to_sample[0], friendly_name.c_str(), &overlay_handle_a);
-			vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys_to_sample[0], friendly_name.c_str(), &overlay_handle_b);
+			std::string friendly_name = std::string(c.overlay_keys[0]) + "friendly";
+			vr::EVROverlayError errora = a->ovi->CreateOverlay(c.overlay_keys[0], friendly_name.c_str(), &overlay_handle_a);
+			vr::EVROverlayError errorb = b->ovi->CreateOverlay(c.overlay_keys[0], friendly_name.c_str(), &overlay_handle_b);
 			ASSERT(errora == errorb);
 
 
 			vr::VROverlayHandle_t found_overlay_handle_a; uninit(found_overlay_handle_a);
-			vr::EVROverlayError found_errora = a->ovi->FindOverlay(c.overlay_keys_to_sample[0], &found_overlay_handle_a);
+			vr::EVROverlayError found_errora = a->ovi->FindOverlay(c.overlay_keys[0], &found_overlay_handle_a);
 
 			// give b a chance to detect the new overlay
 			ia->Refresh();
 			ib->Refresh();
 
 			vr::VROverlayHandle_t found_overlay_handle_b; uninit(found_overlay_handle_b);
-			vr::EVROverlayError found_errorb = b->ovi->FindOverlay(c.overlay_keys_to_sample[0], &found_overlay_handle_b);
+			vr::EVROverlayError found_errorb = b->ovi->FindOverlay(c.overlay_keys[0], &found_overlay_handle_b);
 			ASSERT(found_errora == found_errorb);
 			ASSERT(found_overlay_handle_a == found_overlay_handle_b);
 
@@ -654,7 +654,7 @@ void InterfaceAuditor::compare_ovi_interfaces(
 		}
 
 		// check they can find their names
-		for (int i = 0; i < c.num_overlays_to_sample; i++)
+		for (int i = 0; i < c.num_overlays; i++)
 		{
 			char szbufa[256];
 			uninit(szbufa);
@@ -673,7 +673,7 @@ void InterfaceAuditor::compare_ovi_interfaces(
 
 		// test with no textures assigned
 		{
-			for (int i = 0; i < c.num_overlays_to_sample; i++)
+			for (int i = 0; i < c.num_overlays; i++)
 			{
 				uint32_t aw = 99, ah = 99;
 				vr::EVROverlayError aimg_err = a->ovi->GetOverlayImageData(a_handles[i], nullptr, 0, &aw, &ah);
@@ -698,7 +698,7 @@ void InterfaceAuditor::compare_ovi_interfaces(
 				tex[i] = (char)i;
 			}
 
-			for (int i = 0; i < c.num_overlays_to_sample; i++)
+			for (int i = 0; i < c.num_overlays; i++)
 			{
 				vr::EVROverlayError erra = a->ovi->SetOverlayRaw(a_handles[i], tex, texture_w, texture_h, depth);
 				vr::EVROverlayError errb = b->ovi->SetOverlayRaw(b_handles[i], tex, texture_w, texture_h, depth);
@@ -723,7 +723,7 @@ void InterfaceAuditor::compare_ovi_interfaces(
 			free(texb);
 		}
 	}
-	for (int i = 0; i < c.num_overlays_to_sample; i++)
+	for (int i = 0; i < c.num_overlays; i++)
 	{
 		vr::VROverlayHandle_t handle_a = a_handles[i];
 		vr::VROverlayHandle_t handle_b = b_handles[i];
@@ -1863,6 +1863,32 @@ void InterfaceAuditor::compare_sysi_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 		bool inputb = b->sysi->IsInputFocusCapturedByAnotherProcess();
 		ASSERT(inputa == inputb);
 	}
+
+	for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
+	{
+		std::vector<vr::ETrackedDeviceProperty> props =
+		{
+			vr::Prop_EdidVendorID_Int32,
+			vr::Prop_VendorSpecific_Reserved_Start
+		};
+
+		for (auto prop : props)
+		{
+			vr::ETrackedPropertyError errora;
+			int32_t reta = a->sysi->GetInt32TrackedDeviceProperty(i, prop, &errora);
+
+			vr::ETrackedPropertyError errorb;
+			int32_t retb = b->sysi->GetInt32TrackedDeviceProperty(i, prop, &errorb);
+			ASSERT(reta == retb);
+			ASSERT(errora == errorb);
+		}
+		
+	
+
+	}
+	
+
+
 }
 
 void InterfaceAuditor::compare_taci_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)

@@ -202,16 +202,30 @@ void run_raw_vs_tracker_audit_test()
 
 	TrackerConfig c;
 	c.set_default();
-	c.num_overlays_to_sample = sizeof(overlay_keys)/sizeof(overlay_keys[0]);
-	c.overlay_keys_to_sample = overlay_keys;
+	c.num_overlays = sizeof(overlay_keys)/sizeof(overlay_keys[0]);
+	c.overlay_keys = overlay_keys;
 
-	c.num_resources_to_sample = sizeof(resource_names) / sizeof(resource_names[0]);
-	c.resource_directories_to_sample = resource_directories;
-	c.resource_filenames_to_sample = resource_names;
+	c.num_resources = sizeof(resource_names) / sizeof(resource_names[0]);
+	c.resource_directories = resource_directories;
+	c.resource_filenames = resource_names;
 
-	c.float_setting_names = float_setting_names;
-	c.float_setting_sections = float_setting_sections;
-	c.num_float_settings = sizeof(float_setting_names) / sizeof(float_setting_names[0]);
+	c.custom_settings.float_names = float_setting_names;
+	c.custom_settings.float_sections = float_setting_sections;
+	c.custom_settings.num_float_settings = sizeof(float_setting_names) / sizeof(float_setting_names[0]);
+
+	
+
+	const char *vendor_int32_property_names[] = 
+	{
+		"vendor_test"
+	};
+	int vendor_int32_properties_values[] =
+	{
+		vr::Prop_VendorSpecific_Reserved_Start
+	};
+	c.custom_tracked_device_properties.int32_names = vendor_int32_property_names;
+	c.custom_tracked_device_properties.int32_values = vendor_int32_properties_values;
+	c.custom_tracked_device_properties.num_int32_properties = sizeof(vendor_int32_property_names)/sizeof(vendor_int32_property_names[0]);
 
 
 	RawInterface raw;
@@ -244,9 +258,21 @@ void run_serialization_test()
 
 	TrackerConfig c;
 	c.set_default();
-	c.float_setting_names = float_setting_names;
-	c.float_setting_sections = float_setting_sections;
-	c.num_float_settings = sizeof(float_setting_names) / sizeof(float_setting_names[0]);
+	c.custom_settings.float_names = float_setting_names;
+	c.custom_settings.float_sections = float_setting_sections;
+	c.custom_settings.num_float_settings = sizeof(float_setting_names) / sizeof(float_setting_names[0]);
+	const char *vendor_int32_property_names[] =
+	{
+		"vendor_test"
+	};
+	int vendor_int32_properties_values[] =
+	{
+		vr::Prop_VendorSpecific_Reserved_Start
+	};
+	c.custom_tracked_device_properties.int32_names = vendor_int32_property_names;
+	c.custom_tracked_device_properties.int32_values = vendor_int32_properties_values;
+	c.custom_tracked_device_properties.num_int32_properties = sizeof(vendor_int32_property_names) / sizeof(vendor_int32_property_names[0]);
+
 
 	RawInterface raw;
 	raw.Init();

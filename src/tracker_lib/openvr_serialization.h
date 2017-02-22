@@ -132,4 +132,27 @@ inline void read_string_vector_from_stream(EncodeStream &s, std::vector<std::str
 	}
 }
 
+inline void write_int_vector_to_stream(EncodeStream &s, std::vector<int> &v)
+{
+	uint32_t count = (uint32_t)v.size();
+	encode(count, s);
+
+	for (int i = 0; i < (int)count; i++)
+	{
+		encode(v[i], s);
+	}
+}
+
+inline void read_int_vector_from_stream(EncodeStream &s, std::vector<int> &v)
+{
+	uint32_t count;
+	decode(count, s);
+	v.reserve(count);
+	for (int i = 0; i < (int)count; i++)
+	{
+		int x;
+		decode(x, s);
+		v.emplace_back(x);
+	}
+}
 

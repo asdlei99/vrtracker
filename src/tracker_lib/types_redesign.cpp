@@ -3751,20 +3751,16 @@ void TrackerConfig::set_default()
 	frame_timing_frames_ago = 0;
 	frame_timings_num_frames = 10;
 
-	num_overlays_to_sample = 1;
-	overlay_keys_to_sample = default_overlay_keys;
+	num_overlays = 1;
+	overlay_keys = default_overlay_keys;
 
-	num_resources_to_sample = 0;
-	resource_directories_to_sample = nullptr;
-	resource_filenames_to_sample = nullptr;
+	num_resources = 0;
+	resource_directories = nullptr;
+	resource_filenames = nullptr;
 
-	num_string_settings = 0;
-	num_float_settings = 0;
-	num_int32_settings = 0;
-	num_bool_settings = 0;	
+	memset(&custom_settings, 0, sizeof(custom_settings));
+	memset(&custom_tracked_device_properties, 0, sizeof(custom_tracked_device_properties));
 }
-
-
 
 //
 // resources outside of the bare openvr interfaces that need to be 
@@ -3785,16 +3781,23 @@ struct AdditionalResourceKeys
 
 	void Init(const TrackerConfig &c)
 	{
-		m_overlay_indexer.Init(c.overlay_keys_to_sample, c.num_overlays_to_sample);
-		m_resources_indexer.Init(c.resource_filenames_to_sample, c.resource_directories_to_sample, c.num_resources_to_sample);
+		m_overlay_indexer.Init(c.overlay_keys, c.num_overlays);
+		m_resources_indexer.Init(c.resource_filenames, c.resource_directories, c.num_resources);
 		m_settings_indexer.Init(
-			c.num_bool_settings,	c.bool_setting_sections,	c.bool_setting_names,
-			c.num_int32_settings,	c.int32_setting_sections,	c.int32_setting_names,
-			c.num_string_settings,	c.string_setting_sections,	c.string_setting_names,
-			c.num_float_settings,	c.float_setting_sections,	c.float_setting_names
+			c.custom_settings.num_bool_settings,	c.custom_settings.bool_sections,	c.custom_settings.bool_names,
+			c.custom_settings.num_int32_settings,	c.custom_settings.int32_sections,	c.custom_settings.int32_names,
+			c.custom_settings.num_string_settings,	c.custom_settings.string_sections,	c.custom_settings.string_names,
+			c.custom_settings.num_float_settings,	c.custom_settings.float_sections,	c.custom_settings.float_names
 		);
 		m_applications_properties_indexer.Init();
-		m_device_properties_indexer.Init();
+		auto *props = &c.custom_tracked_device_properties;
+		m_device_properties_indexer.Init(
+			props->num_bool_properties,		props->bool_names,		props->bool_values,
+			props->num_string_properties,	props->string_names,	props->string_values,
+			props->num_uint64_properties,	props->uint64_names,	props->uint64_values,
+			props->num_int32_properties,	props->int32_names,		props->int32_values,
+			props->num_mat34_properties,	props->mat34_names,		props->mat34_values,
+			props->num_float_properties,	props->float_names,		props->float_values);
 		m_data.nearz = c.nearz;
 		m_data.farz = c.farz;
 		m_data.distortion_sample_height = c.distortion_sample_height;
@@ -6262,6 +6265,7 @@ bool VRSystemCursor::lookup_property_index(vr::TrackedDeviceIndex_t unDeviceInde
 		if (m_property_indexer->GetIndexForEnum(setting_type, prop_enum, property_index))
 		{
 			rc = true;
+			error = TrackedProp_Success;
 		}
 		else
 		{
@@ -6271,6 +6275,10 @@ bool VRSystemCursor::lookup_property_index(vr::TrackedDeviceIndex_t unDeviceInde
 	else
 	{
 		error = TrackedProp_InvalidDevice;
+	}
+	if (pError)
+	{
+		*pError = error;
 	}
 	return rc;
 }

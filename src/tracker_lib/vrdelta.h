@@ -122,47 +122,59 @@ struct TrackerConfig	// aka Hints
 	uint32_t frame_timing_frames_ago;		// intercept GetFrameTiming
 	uint32_t frame_timings_num_frames;		// intercept GetFrameTimings
 
-	int num_overlays_to_sample;				// intercept 30-50 overlay functions
-	const char **overlay_keys_to_sample;
+	int num_overlays;				// intercept 30-50 overlay functions
+	const char **overlay_keys;
 
-	int num_resources_to_sample;			// intercept GetResourceFullPath and GetResourceFullPath
-	const char **resource_directories_to_sample;
-	const char **resource_filenames_to_sample;
+	int num_resources;			// intercept GetResourceFullPath and GetResourceFullPath
+	const char **resource_directories;
+	const char **resource_filenames;
 
 	// custom settings
-	int num_bool_settings;
-	const char **bool_setting_sections;
-	const char **bool_setting_names;
+	struct {
+		int num_bool_settings;
+		const char **bool_sections;
+		const char **bool_names;
 
-	int num_int32_settings;
-	const char **int32_setting_sections;
-	const char **int32_setting_names;
+		int num_int32_settings;
+		const char **int32_sections;
+		const char **int32_names;
 
-	int num_string_settings;
-	const char **string_setting_sections;
-	const char **string_setting_names;
+		int num_string_settings;
+		const char **string_sections;
+		const char **string_names;
 
-	int num_float_settings;
-	const char **float_setting_sections;
-	const char **float_setting_names;
+		int num_float_settings;
+		const char **float_sections;
+		const char **float_names;
+	} custom_settings;
 
+	// custom tracked device properties
+	struct {
+		int num_bool_properties;
+		const char **bool_names;
+		int *bool_values;
 
-	// application launch arguments
-	//uint32_t unArgsHandle;
-	//ct VREvent_ApplicationLaunch_t
+		int num_string_properties;
+		const char **string_names;
+		int *string_values;
 
-	// devices
-	//struct VkPhysicalDevice_T // intercept virtual uint32_t GetVulkanDeviceExtensionsRequired( VkPhysicalDevice_T *pPhysicalDevice, VR_OUT_STRING() char *pchValue, uint32_t unBufferSize ) = 0;
+		int num_uint64_properties;
+		const char **uint64_names;
+		int *uint64_values;
+
+		int num_int32_properties;
+		const char **int32_names;
+		int *int32_values;
+
+		int num_mat34_properties;
+		const char **mat34_names;
+		int *mat34_values;
+
+		int num_float_properties;
+		const char **float_names;
+		int *float_values;
+	} custom_tracked_device_properties;
 	
-	// VRRenderModelsCursor::GetComponentState is using a couple unpredictible inputs pstate and pcontroller state
-
-	// ApplyTransform - 
-	// * write some code to apply transforms
-
-	// compute overlayintersectionresults
-
-	// bigone: figure out how to process events
-
 	void set_default();
 	
 };
