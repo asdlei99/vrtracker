@@ -151,6 +151,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="openvr_indexers.cpp" />
     <ClCompile Include="slaballocator.cpp" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="types_redesign.cpp" />
@@ -161,6 +162,8 @@
     <ClInclude Include="InterfacesIntoOpenVR.h" />
     <ClInclude Include="openvr_broker.h" />
     <ClInclude Include="openvr_cppstub.h" />
+    <ClInclude Include="openvr_hash.h" />
+    <ClInclude Include="openvr_indexers.h" />
     <ClInclude Include="openvr_method_ids.h" />
     <ClInclude Include="openvr_operators.h" />
     <ClInclude Include="openvr_serialization.h" />

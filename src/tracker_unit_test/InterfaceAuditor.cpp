@@ -1937,10 +1937,10 @@ void InterfaceAuditor::compare_taci_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 	{
 		for (int j = 0; j < vr::MAX_CAMERA_FRAME_TYPES; j++)
 		{
-			vr::HmdVector2_t focal_lena;
-			vr::HmdVector2_t center_lena;
-			vr::HmdVector2_t focal_lenb;
-			vr::HmdVector2_t center_lenb;
+			vr::HmdVector2_t focal_lena; uninit(focal_lena);
+			vr::HmdVector2_t center_lena; uninit(center_lena);
+			vr::HmdVector2_t focal_lenb; uninit(focal_lenb);
+			vr::HmdVector2_t center_lenb; uninit(center_lenb);
 			vr::EVRTrackedCameraError rca = a->taci->GetCameraIntrinsics(i, (vr::EVRTrackedCameraFrameType)j, &focal_lena, &center_lena);
 			vr::EVRTrackedCameraError rcb = b->taci->GetCameraIntrinsics(i, (vr::EVRTrackedCameraFrameType)j, &focal_lenb, &center_lenb);
 			ASSERT(rca == rcb);
@@ -1953,8 +1953,8 @@ void InterfaceAuditor::compare_taci_interfaces(OpenVRInterfaceUnderTest *ia, Ope
 	{
 		for (int j = 0; j < vr::MAX_CAMERA_FRAME_TYPES; j++)
 		{
-			vr::HmdMatrix44_t projectiona;
-			vr::HmdMatrix44_t projectionb;
+			vr::HmdMatrix44_t projectiona; uninit(projectiona);
+			vr::HmdMatrix44_t projectionb; uninit(projectionb);
 			vr::EVRTrackedCameraError rca = a->taci->GetCameraProjection(i, (vr::EVRTrackedCameraFrameType)j, c.nearz, c.farz, &projectiona);
 			vr::EVRTrackedCameraError rcb = b->taci->GetCameraProjection(i, (vr::EVRTrackedCameraFrameType)j, c.nearz, c.farz, &projectionb);
 			ASSERT(rca == rcb);

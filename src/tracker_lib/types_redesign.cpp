@@ -6,6 +6,7 @@
 #include "openvr_cppstub.h"
 #include "vrdelta.h"
 #include "dprintf.h"
+#include "openvr_indexers.h"
 
 #include <chrono>
 #include <type_traits>
@@ -84,16 +85,8 @@ struct twrap
 };
 #endif
 
-#define TBL_SIZE(t) (sizeof(t)/sizeof(t[0]))
 
-struct device_property_row
-{
-	int enum_val;
-	const char *name;
-};
 
-using namespace vr;
-#include "openvr_delta_cfgtables.cpp"
 
 struct AlwaysAndForever
 {};
@@ -122,6 +115,8 @@ namespace openvr_string
 		}
 	}
 };
+
+using namespace vr;
 
 // the following type traits for enums used by the history logic to detect if an error code implies that the value
 // part is valid
@@ -3453,40 +3448,7 @@ struct ResourcesWrapper
 	StringPool *string_pool;
 };
 
-// create internal index for a key
-// overlays: keyed on string,handle->index
-// apps: keyed on string->index
-// resources: name,dir/name/full_path->index
-// unArgsHandle: uint32_t->index
-class InternalIndexer
-{
 
-
-};
-
-static void write_string_vector_to_stream(EncodeStream &s, std::vector<std::string> &v)
-{
-	uint32_t count = (uint32_t)v.size();
-	encode(count, s);
-	
-	for (int i = 0; i < (int)count; i++)
-	{
-		encode(v[i].c_str(), s);
-	}
-}
-
-static void read_string_vector_from_stream(EncodeStream &s, std::vector<std::string> &v)
-{
-	uint32_t count;
-	decode(count, s);
-	v.reserve(count);
-	for (int i = 0; i < (int)count; i++)
-	{
-		char szBuf[256];
-		decode_str(szBuf, s);
-		v.emplace_back(szBuf);
-	}
-}
 
 // knows how to map indexes to application keys
 class ApplicationsIndexer
@@ -3668,7 +3630,6 @@ public:
 		}
 	}
 
-
 	void WriteToStream(EncodeStream &s)
 	{
 		int x = 11;
@@ -3803,435 +3764,6 @@ void TrackerConfig::set_default()
 	num_bool_settings = 0;	
 }
 
-struct hash_c_string {
-	void hash_combine(uint32_t& seed, char v) const {
-		seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-	}
-	uint32_t operator() (const char * p) const {
-		uint32_t hash = 0;
-		for (; *p; ++p)
-			hash_combine(hash, *p);
-		return hash;
-	}
-};
-struct comp_c_string {
-	bool operator()(const char * p1, const char * p2) const {
-		return strcmp(p1, p2) == 0;
-	}
-};
-typedef std::unordered_map<
-	const char *,
-	uint32_t,
-	hash_c_string,
-	comp_c_string
-> unordered_string2int;
-
-class PropertiesIndexer
-{
-public:
-	enum PropertySettingType
-	{
-		PROP_BOOL,
-		PROP_STRING,
-		PROP_UINT64,
-		PROP_INT32,
-		PROP_MAT34,
-		PROP_FLOAT,
-		NUM_PROP_TYPES,
-	};
-
-	// i want properties to have names
-	// i want them to have indexes into node arrays
-	// properties have enum values associated with them
-	// properties don't have sections
-	void Init(
-		const device_property_row *bool_properties, int num_bool_properties,
-		const device_property_row *string_properties, int num_string_properties,
-		const device_property_row *uint64_properties, int num_uint64_properties,
-		const device_property_row *int32_properties, int num_int32_properties,
-		const device_property_row *mat34_properties, int num_mat34_properties,
-		const device_property_row *float_properties, int num_float_properties
-		)
-	{
-		property_table[PROP_BOOL] =		bool_properties;
-		property_table[PROP_STRING] =	string_properties;
-		property_table[PROP_UINT64] =	uint64_properties;
-		property_table[PROP_INT32] =	int32_properties;
-		property_table[PROP_MAT34] =	mat34_properties;
-		property_table[PROP_FLOAT] =	float_properties;
-
-		enum2index[PROP_BOOL].reserve(num_bool_properties);
-		for (int i = 0; i < num_bool_properties; i++)
-		{
-			enum2index[PROP_BOOL].insert({ (int)bool_properties[i].enum_val, i });
-		}
-
-		enum2index[PROP_STRING].reserve(num_string_properties);
-		for (int i = 0; i < num_string_properties; i++)
-		{
-			enum2index[PROP_STRING].insert({ (int)string_properties[i].enum_val, i });
-		}
-
-		enum2index[PROP_UINT64].reserve(num_uint64_properties);
-		for (int i = 0; i < num_uint64_properties; i++)
-		{
-			enum2index[PROP_UINT64].insert({ (int)uint64_properties[i].enum_val, i });
-		}
-
-		enum2index[PROP_INT32].reserve(num_int32_properties);
-		for (int i = 0; i < num_int32_properties; i++)
-		{
-			enum2index[PROP_INT32].insert({ (int)int32_properties[i].enum_val, i });
-		}
-
-		enum2index[PROP_MAT34].reserve(num_mat34_properties);
-		for (int i = 0; i < num_mat34_properties; i++)
-		{
-			enum2index[PROP_MAT34].insert({ (int)mat34_properties[i].enum_val, i });
-		}
-		enum2index[PROP_FLOAT].reserve(num_float_properties);
-		for (int i = 0; i < num_float_properties; i++)
-		{
-			enum2index[PROP_FLOAT].insert({ (int)float_properties[i].enum_val, i });
-		}
-	}
-
-	bool GetIndexForEnum(PropertySettingType setting_type, int enum_val, int *index)
-	{
-		bool rc = false;
-		auto iter = enum2index[setting_type].find(enum_val);
-		if (iter != enum2index[setting_type].end())
-		{
-			*index = iter->second;
-			rc = true;
-		}
-		return rc;
-	}
-	int GetNumPropertiesOfType(PropertySettingType setting_type)
-	{
-		return enum2index[setting_type].size();
-	}
-	int GetEnumVal(PropertySettingType setting_type, int index)
-	{
-		return property_table[setting_type][index].enum_val;
-	}
-	const char* GetName(PropertySettingType setting_type, int index)
-	{
-		return property_table[setting_type][index].name;
-	}
-private:
-	const device_property_row *property_table[NUM_PROP_TYPES];
-	std::unordered_map<int, int> enum2index[NUM_PROP_TYPES];
-
-
-};
-
-class ApplicationsPropertiesIndexer : public PropertiesIndexer
-{
-public:
-	void Init()
-	{
-		PropertiesIndexer::Init(
-			(const device_property_row*)application_bool_properties_table, TBL_SIZE(application_bool_properties_table),
-			(const device_property_row*)application_string_properties_table, TBL_SIZE(application_string_properties_table),
-			(const device_property_row*)application_uint64_properties_table, TBL_SIZE(application_uint64_properties_table),
-			nullptr, 0,
-			nullptr, 0,
-			nullptr, 0);
-	}
-
-	void WriteToStream(EncodeStream &s)
-	{
-		int x = 33;
-		encode(x, s);
-#if 0
-		for (int i = 0; i < NUM_SETTING_TYPES; i++)
-		{
-			write_string_vector_to_stream(s, custom_sections[i]);
-			write_string_vector_to_stream(s, custom_settings[i]);
-		}
-#endif
-	}
-
-	void ReadFromStream(EncodeStream &s)
-	{
-		int x;
-		decode(x, s);
-		assert(x == 33);
-		Init();
-	}
-};
-
-class DevicePropertiesIndexer : public PropertiesIndexer
-{
-public:
-	void Init()
-	{
-		PropertiesIndexer::Init(
-			device_bool_properties_table, TBL_SIZE(device_bool_properties_table),
-			device_string_properties_table, TBL_SIZE(device_string_properties_table),
-			device_uint64_properties_table, TBL_SIZE(device_uint64_properties_table),
-			device_int32_properties_table, TBL_SIZE(device_int32_properties_table),
-			device_mat34_properties_table, TBL_SIZE(device_mat34_properties_table),
-			device_float_properties_table, TBL_SIZE(device_float_properties_table)
-			);
-	}
-
-	void WriteToStream(EncodeStream &s)
-	{
-		int x = 33;
-		encode(x, s);
-#if 0
-		for (int i = 0; i < NUM_SETTING_TYPES; i++)
-		{
-			write_string_vector_to_stream(s, custom_sections[i]);
-			write_string_vector_to_stream(s, custom_settings[i]);
-		}
-#endif
-	}
-
-	void ReadFromStream(EncodeStream &s)
-	{
-		int x;
-		decode(x, s);
-		assert(x == 33);
-		Init();
-	}
-};
-
-
-
-// setting clients use string sections and string names to find them
-class SettingsIndexer
-{
-public:
-
-	enum SectionSettingType
-	{
-		SETTING_TYPE_BOOL,
-		SETTING_TYPE_STRING,
-		SETTING_TYPE_FLOAT,
-		SETTING_TYPE_INT32,
-		NUM_SETTING_TYPES
-	};
-
-	std::vector < std::string > custom_sections[NUM_SETTING_TYPES];
-	std::vector < std::string > custom_settings[NUM_SETTING_TYPES];
-	
-	bool AddCustomSetting(const char *section_name_in, SectionSettingType section_type, const char *setting_name_in)
-	{
-		auto section_iter = name2section.find(section_name_in);
-		unordered_string2int::iterator field_iter;
-		if (section_iter != name2section.end())
-		{
-			field_iter = sections[section_iter->second].typed_data[section_type].fieldname2index.find(setting_name_in);
-		}
-
-		if (section_iter == name2section.end() || field_iter == sections[section_iter->second].typed_data[section_type].fieldname2index.end())
-		{
-			// do sme
-			custom_settings[section_type].emplace_back(setting_name_in);
-			custom_sections[section_type].emplace_back(section_name_in);
-
-			const char *setting_name = custom_settings[section_type].back().c_str();
-			const char *section_name = custom_sections[section_type].back().c_str();
-
-			int section_index;
-			if (section_iter == name2section.end())
-			{
-				section_index = sections.size();
-				name2section.insert({ section_name, section_index });
-				sections.emplace_back(section_name);
-			}
-			else
-			{
-				section_index = section_iter->second;
-			}
-
-			int field_index = sections[section_index].typed_data[section_type].fieldnames.size();
-			sections[section_index].typed_data[section_type].fieldnames.push_back(setting_name);
-			sections[section_index].typed_data[section_type].fieldname2index.insert({ setting_name, field_index });
-		}
-		return true;
-	}
-
-	void InitDefault()
-	{
-		int num_sections = DEFAULT_SECTIONS_TABLE_SIZE;
-		sections.resize(num_sections);
-		for (int i = 0; i < DEFAULT_SECTIONS_TABLE_SIZE; i++)
-		{
-			const section_def_t *def = &default_section_defs[i];
-			name2section[def->section_name] = i;
-			sections[i].section_name = def->section_name;
-			sections[i].typed_data[SETTING_TYPE_BOOL].fieldnames.resize(def->bool_size);
-			for (int j = 0; j < def->bool_size; j++)
-			{
-				const char *field_name = def->bool_settings_ary[j];
-				sections[i].typed_data[SETTING_TYPE_BOOL].fieldnames[j] = field_name;
-				sections[i].typed_data[SETTING_TYPE_BOOL].fieldname2index[field_name] = j;
-			}
-
-			sections[i].typed_data[SETTING_TYPE_STRING].fieldnames.resize(def->stri_size);
-			for (int j = 0; j < def->stri_size; j++)
-			{
-				const char *field_name = def->stri_settings_ary[j];
-				sections[i].typed_data[SETTING_TYPE_STRING].fieldnames[j] = field_name;
-				sections[i].typed_data[SETTING_TYPE_STRING].fieldname2index[field_name] = j;
-			}
-
-			sections[i].typed_data[SETTING_TYPE_FLOAT].fieldnames.resize(def->floa_size);
-			for (int j = 0; j < def->floa_size; j++)
-			{
-				const char *field_name = def->floa_settings_ary[j];
-				sections[i].typed_data[SETTING_TYPE_FLOAT].fieldnames[j] = field_name;
-				sections[i].typed_data[SETTING_TYPE_FLOAT].fieldname2index[field_name] = j;
-			}
-
-			sections[i].typed_data[SETTING_TYPE_INT32].fieldnames.resize(def->int3_size);
-			for (int j = 0; j < def->int3_size; j++)
-			{
-				const char *field_name = def->int32_settings_ary[j];
-				sections[i].typed_data[SETTING_TYPE_INT32].fieldnames[j] = field_name;
-				sections[i].typed_data[SETTING_TYPE_INT32].fieldname2index[field_name] = j;
-			}
-		}
-	}
-	
-	void Init(
-		int num_bool_settings, const char **bool_setting_sections, const char **bool_setting_names,
-		int num_int32_settings, const char **int32_setting_sections, const char **int32_setting_names,
-		int num_string_settings, const char **string_setting_sections, const char **string_setting_names,
-		int num_float_settings, const char **float_setting_sections, const char **float_setting_names)
-	{
-		InitDefault();
-		for (int i = 0; i < num_bool_settings; i++)
-		{
-			AddCustomSetting(bool_setting_sections[i], SectionSettingType::SETTING_TYPE_BOOL, bool_setting_names[i]);
-		}
-		for (int i = 0; i < num_int32_settings; i++)
-		{
-			AddCustomSetting(int32_setting_sections[i], SectionSettingType::SETTING_TYPE_INT32, int32_setting_names[i]);
-		}
-		for (int i = 0; i < num_string_settings; i++)
-		{
-			AddCustomSetting(string_setting_sections[i], SectionSettingType::SETTING_TYPE_STRING, string_setting_names[i]);
-		}
-		for (int i = 0; i < num_float_settings; i++)
-		{
-			AddCustomSetting(float_setting_sections[i], SectionSettingType::SETTING_TYPE_FLOAT, float_setting_names[i]);
-		}
-	}
-	
-	void WriteToStream(EncodeStream &s)
-	{
-		int x = 33;
-		encode(x, s);
-		for (int i = 0; i < NUM_SETTING_TYPES; i++)
-		{
-			write_string_vector_to_stream(s, custom_sections[i]);
-			write_string_vector_to_stream(s, custom_settings[i]);
-		}
-	}
-
-	void ReadFromStream(EncodeStream &s)
-	{
-		int x;
-		decode(x, s);
-		assert(x == 33);
-		InitDefault();
-		std::vector<std::string> tmp_sections;
-		std::vector<std::string> tmp_settings;
-
-		for (int i = 0; i < NUM_SETTING_TYPES; i++)
-		{
-			tmp_sections.clear();
-			tmp_settings.clear();
-			read_string_vector_from_stream(s, tmp_sections);
-			read_string_vector_from_stream(s, tmp_settings);
-
-			for (int j = 0; j < tmp_sections.size(); j++)
-			{
-				AddCustomSetting(tmp_sections[j].c_str(), SectionSettingType(i), tmp_settings[j].c_str());
-			}
-		}
-	}
-
-
-	bool GetIndexes(const char *section_name, SectionSettingType setting_type, const char *setting_name,
-						int *section_in, int *setting_in)
-	{
-		bool rc = false;
-		auto iter = name2section.find(section_name);
-		if (iter != name2section.end())
-		{
-			int section = iter->second;
-			auto field_iter = sections[section].typed_data[setting_type].fieldname2index.find(setting_name);
-			if (field_iter != sections[section].typed_data[setting_type].fieldname2index.end())
-			{
-				*section_in = section;
-				*setting_in = field_iter->second;
-				rc = true;
-			}
-		}
-		return rc;
-	}
-
-	const char *GetSectionName(int section)
-	{
-		return sections[section].section_name;
-	}
-
-	int GetNumSections() 
-	{
-		return (int)sections.size();
-	}
-
-	int GetNumFields(const char *section_name, SectionSettingType setting_type)
-	{
-		int rc = 0;
-		auto iter = name2section.find(section_name);
-		if (iter != name2section.end())
-		{
-			int section = iter->second;
-			rc = sections[section].typed_data[setting_type].fieldnames.size();
-		}
-		return rc;
-	}
-	const char **GetFieldNames(const char *section_name, SectionSettingType setting_type)
-	{
-		const char **rc = nullptr;
-		auto iter = name2section.find(section_name);
-		if (iter != name2section.end())
-		{
-			int section = iter->second;
-			rc = &sections[section].typed_data[setting_type].fieldnames.at(0);
-		}
-		return rc;
-	}
-	
-private:
-	// settings of a type
-	struct subtable
-	{
-		std::vector<const char *> fieldnames;
-		unordered_string2int fieldname2index;
-	};
-
-	struct section_data
-	{
-		section_data() {}
-
-		section_data(const char *s) : section_name(s) {}
-
-		const char *section_name;
-		subtable typed_data[NUM_SETTING_TYPES];
-	};
-
-	std::vector<section_data> sections;
-	unordered_string2int name2section;
-};
-
 
 
 //
@@ -4246,7 +3778,7 @@ struct AdditionalResourceKeys
 	ResourcesIndexer &GetResourcesIndexer()			{ return m_resources_indexer; }
 	SettingsIndexer &GetSettingsIndexer()			{ return m_settings_indexer; }
 	DevicePropertiesIndexer &GetDevicePropertiesIndexer() { return m_device_properties_indexer; }
-
+	MimeTypesIndexer &GetMimeTypesIndexer()			{ return m_mime_types_indexer;  }
 
 	AdditionalResourceKeys()
 	{}
@@ -4350,7 +3882,7 @@ private:
 	ResourcesIndexer m_resources_indexer;
 	SettingsIndexer m_settings_indexer;
 	DevicePropertiesIndexer m_device_properties_indexer;
-	
+	MimeTypesIndexer m_mime_types_indexer;
 };
 
 
@@ -5000,12 +4532,12 @@ void visit_application_state(visitor_fn &visitor, vrstate::applications_schema *
 
 template <typename visitor_fn>
 void visit_mime_type_schema(visitor_fn &visitor, vrstate::mime_type_schema *ss,
-	ApplicationsWrapper wrap, uint32_t mime_index)
+	ApplicationsWrapper wrap, uint32_t mime_index, AdditionalResourceKeys &resource_keys)
 {
-	const char *mime_type = mime_types[mime_index].name;
+	const char *mime_type = resource_keys.GetMimeTypesIndexer().GetNameForIndex(mime_index);
 	if (visitor.visit_source_interfaces())
 	{
-		visitor.visit_node(ss->mime_type.item, mime_types[mime_index].name, (int)strlen(mime_type) + 1);
+		visitor.visit_node(ss->mime_type.item, mime_type, (int)strlen(mime_type) + 1);
 	}
 	else
 	{
@@ -5018,7 +4550,7 @@ void visit_mime_type_schema(visitor_fn &visitor, vrstate::mime_type_schema *ss,
 
 
 template <typename visitor_fn>
-static void visit_applications_node(visitor_fn &visitor, vrstate::applications_schema *ss, ApplicationsWrapper wrap, 
+static void visit_applications_node(visitor_fn &visitor, vrstate::applications_schema *ss, ApplicationsWrapper &wrap, 
 	 AdditionalResourceKeys &resource_keys, ALLOCATOR_DECL)
 {
 	visitor.start_group_node("app", -1);
@@ -5055,17 +4587,18 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 	LEAF_SCALAR(is_quit_user_prompt, wrap.IsQuitUserPromptRequested());
 	LEAF_SCALAR(current_scene_process_id, wrap.GetCurrentSceneProcessId());
 
-	ss->mime_types.reserve(mime_tbl_size);
-	while (ss->mime_types.size() < mime_tbl_size)
+	int num_mime_types = resource_keys.GetMimeTypesIndexer().GetNumMimeTypes();
+	ss->mime_types.reserve(num_mime_types);
+	while (ss->mime_types.size() < num_mime_types)
 	{
 		ss->mime_types.emplace_back(allocator);
 		ss->structure_version++;
 	}
 
 	START_VECTOR(mime_types);
-	for (int i = 0; i < mime_tbl_size; i++)
+	for (int i = 0; i < num_mime_types; i++)
 	{
-		visit_mime_type_schema(visitor, &ss->mime_types[i], wrap, i);
+		visit_mime_type_schema(visitor, &ss->mime_types[i], wrap, i, resource_keys);
 	}
 	END_VECTOR(mime_types);
 
@@ -6841,19 +6374,6 @@ struct vr::HmdMatrix34_t VRSystemCursor::GetMatrix34TrackedDeviceProperty(
 	LOG_EXIT_RC(rc, "CppStubGetMatrix34TrackedDeviceProperty");
 }
 
-bool GetIndexForMimeType(const char *pchMimeType, int *index)
-{
-	for (int i = 0; i < mime_tbl_size; i++)
-	{
-		if (strcmp(mime_types[i].name, k_pch_MimeType_HomeApp) == 0)
-		{
-			*index = i;
-			return true;
-		}
-	}
-	return false;
-}
-
 uint32_t VRSystemCursor::GetStringTrackedDeviceProperty(
 		vr::TrackedDeviceIndex_t unDeviceIndex, 
 		vr::ETrackedDeviceProperty prop_enum, 
@@ -7426,7 +6946,7 @@ bool VRApplicationsCursor::GetApplicationAutoLaunch(const char * pchAppKey)
 #define MIME_LOOKUP(field_name)\
 bool rc; \
 int index;\
-if (GetIndexForMimeType(pchMimeType, &index))\
+if (m_context->m_resource_keys->GetMimeTypesIndexer().GetIndexForMimeType(pchMimeType, &index))\
 {\
 	SYNC_APP_STATE(default_application, mime_types[index].default_application);\
 	if (default_application->is_present())\

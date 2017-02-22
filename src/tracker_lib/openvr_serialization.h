@@ -2,6 +2,7 @@
 #include "openvr.h"
 #include <memory.h>
 #include <assert.h>
+#include <vector>
 
 struct EncodeStream
 {
@@ -91,7 +92,7 @@ void decode(const char *&str, EncodeStream &e, U allocator)
 	str = buf;
 }
 
-static void decode_str(char *str, EncodeStream &e)
+inline void decode_str(char *str, EncodeStream &e)
 {
 	// read the size of the string
 	int size;
@@ -102,9 +103,33 @@ static void decode_str(char *str, EncodeStream &e)
 }
 
 
-static void decode(vr::HmdMatrix34_t &v, EncodeStream &e)
+inline void decode(vr::HmdMatrix34_t &v, EncodeStream &e)
 {
 	e.memcpy_from_stream(&v, sizeof(v));
+}
+
+inline void write_string_vector_to_stream(EncodeStream &s, std::vector<std::string> &v)
+{
+	uint32_t count = (uint32_t)v.size();
+	encode(count, s);
+
+	for (int i = 0; i < (int)count; i++)
+	{
+		encode(v[i].c_str(), s);
+	}
+}
+
+inline void read_string_vector_from_stream(EncodeStream &s, std::vector<std::string> &v)
+{
+	uint32_t count;
+	decode(count, s);
+	v.reserve(count);
+	for (int i = 0; i < (int)count; i++)
+	{
+		char szBuf[256];
+		decode_str(szBuf, s);
+		v.emplace_back(szBuf);
+	}
 }
 
 
