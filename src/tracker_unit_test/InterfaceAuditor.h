@@ -1,6 +1,7 @@
 #pragma once
 #include <vrdelta.h>
 #include <vector>
+#include <chrono>
 
 struct OpenVRInterfaceUnderTest
 {
@@ -53,6 +54,8 @@ private:
 
 	void compare_apps(vr::IVRApplications *a_appi, vr::IVRApplications *b_appi);
 
+	std::chrono::steady_clock::time_point start_time;
+	std::chrono::steady_clock::time_point end_time;
 	int num_passes;
 	int num_failures;
 	int num_waivers;

@@ -85,9 +85,6 @@ struct twrap
 };
 #endif
 
-
-
-
 struct AlwaysAndForever
 {};
 
@@ -335,7 +332,7 @@ public:
 
 namespace vrtypes
 {
-	template <typename T, typename P, typename AllocatorT = ALLOCATOR_TYPE>
+	template <typename T, typename P>
 	struct history_entry_base
 	{
 		history_entry_base() = default;
@@ -394,8 +391,8 @@ namespace vrtypes
 		T val;
 	};
 
-	template <typename T, typename AllocatorT>
-	struct history_entry_base <T, AlwaysAndForever, AllocatorT>
+	template <typename T>
+	struct history_entry_base <T, AlwaysAndForever>
 	{
 		history_entry_base() = default;
 
@@ -444,7 +441,7 @@ namespace vrtypes
 	struct history_base
 	{
 		typedef T val_type;
-		using history_entry = history_entry_base<T, P, AllocatorT>;
+		using history_entry = history_entry_base<T, P>;
 
 		typedef typename std::forward_list<history_entry, AllocatorT>::iterator iter_type;
 
@@ -499,7 +496,6 @@ namespace vrtypes
 	template <typename T, typename P, typename AllocatorT = ALLOCATOR_TYPE>
 	struct history : public history_base<T, P, AllocatorT>
 	{
-
 		history(const AllocatorT& alloc) : history_base<T,P,AllocatorT>(alloc)
 		{}
 
@@ -516,9 +512,7 @@ namespace vrtypes
 		void emplace_front(int frame_number, P presence, Args&&... args)
 		{
 			history_base<T, P, AllocatorT>::base_emplace_front(frame_number, presence, std::forward<Args>(args)...);
-			//values.emplace_front();
 		}
-
 	};
 
 	// history with no Presence values
@@ -536,12 +530,9 @@ namespace vrtypes
 		void emplace_front(int frame_number, Args&&... args)
 		{
 			history_base<T, AlwaysAndForever, AllocatorT>::base_emplace_front(frame_number, std::forward<Args>(args)...);
-			//values.emplace_front(frame_number, std::forward<Args>(args)...);
 		}
 	};
 }
-	
-
 
 template <typename T, typename P, typename allocatorT>
 struct serializer_base
@@ -719,6 +710,7 @@ struct deserializer : public deserializer_base<T,P, allocatorT>
 	}
 };
 
+// deserialization routine for history nodes
 template <typename T,typename allocatorT>
 struct deserializer <T, AlwaysAndForever, allocatorT>  : public deserializer_base<T, AlwaysAndForever, allocatorT>
 {
@@ -1958,13 +1950,6 @@ struct vrstate_visitor{};
 struct lhs_only_visitor : public vrstate_visitor
 {
 	inline bool visit_source_interfaces() { return false; }
-#if 0
-	template <typename T, typename P, typename allocatorT>
-	void visit_node(history<std::vector<T, allocatorT>, P, allocatorT> &node, const T *sample_val, int len)
-	{
-		assert(0); 
-	}
-#endif
 
 	// since P is passed as a param, this is the one that'll be chosen for history with P
 	template <typename T, typename P, typename allocatorT>
@@ -2641,7 +2626,6 @@ struct SystemWrapper
 		free(result);
 	}
 
-
 	inline void GetControllerStateWithPose(
 		ETrackingUniverseOrigin origin, 
 		TrackedDeviceIndex_t unDeviceIndex, 
@@ -2802,7 +2786,6 @@ struct SettingsWrapper
 		: setti(setti_in), string_pool(string_pool_in)
 	{}
 
-	
 	inline void GetSetting(const char *pchSection, const char *pchSettingsKey, scalar_result<bool, EVRSettingsError> *result)
 	{
 		result->val = setti->GetBool(pchSection, pchSettingsKey, &result->result_code);
@@ -9476,9 +9459,16 @@ void destroy_cursor(vr_cursor_t h)
 	delete cursor;
 }
 
-// END OF CURSOR TEST
-// END OF CURSOR TEST
-// END OF CURSOR TEST
+
+static TrackerNodeIF* build_tracker_tree(std::vector<TrackerNodeIF*> *all_nodes, tracker *s);
+TrackerNodeIF *get_node_if(vr_state_tracker_t tracker_handle)
+{
+	tracker *s = static_cast<tracker*>(tracker_handle);
+	std::vector<TrackerNodeIF*> all_nodes;
+	TrackerNodeIF *ret = build_tracker_tree(&all_nodes, s);
+
+	return ret;
+}
 
 // public interface
 void capture_vr_state(vr_state_tracker_t h, openvr_broker::open_vr_interfaces &interfaces)
@@ -9633,7 +9623,7 @@ void save_vrstate_to_file(vr_state_tracker_t h, const char *filename, bool binar
 								timestamp_size;
 		assert(size_t(total_size) == total_size);
 		char *buf = (char*)malloc(static_cast<size_t>(total_size));
-
+		assert(buf);
 		//
 		// write header
 		//
@@ -9790,33 +9780,100 @@ void img_gui_update(vr_state_tracker_t h)
 using namespace ImGui;
 struct grid_node;
 
-struct change_of_state
-{
-	virtual int GetFrameNumber() const { return -1;  }
-	virtual int GetPrevFrameNumber() { return -1; }
-	virtual bool GetHovered() const { return false; }
-	virtual void *unique_id() = 0;
-	virtual std::string GetChangeDescriptionString() = 0;
-	virtual std::string GetPrevDescriptionString() = 0;
-}; 
 
-struct grid_node_data_if
+
+// inheritence
+// current:
+// event_node_if : TrackerNodeIF
+// history_node_if : TrackerNodeIF
+//
+// proposed : add a couple new types
+// group_node_if : TrackerNodeIF	e.g. 'system'
+// vector_node_if :						e.g. controllers
+// event_node_if : TrackerNodeIF
+// history_node_if : TrackerNodeIF
+
+struct vector_node_data_if : TrackerNodeIF
 {
-	virtual const char *GetLabel() = 0;
-	virtual const char *GetLabel(int *size) = 0;
-	virtual const char *GetPopupMenuLabel() = 0;
-	virtual std::string GetChangeDescriptionString() = 0;
-	virtual bool has_changes() = 0;
-	virtual bool start_iterator(int start_frame, int end_frame) = 0;
-	virtual change_of_state* get_next() = 0;
-	virtual change_of_state* peek_next() = 0;
-	virtual change_of_state* get_latest() = 0;
+	TrackerNodeIF *m_parent;
+	int m_index_in_parent;
+	std::vector<TrackerNodeIF *> children;
+	std::string m_label;
+
+	vector_node_data_if(const char *label, TrackerNodeIF *parent, int index_in_parent)
+		:
+		m_label(label),
+		m_parent(parent),
+		m_index_in_parent(index_in_parent)
+	{
+	}
+
+	virtual TrackerNodeIF *GetParent() override
+	{
+		return m_parent;
+	}
+
+	virtual int GetMyIndexInParent() override
+	{
+		return m_index_in_parent;
+	}
+
+
+	virtual const char *GetLabel() override
+	{
+		return m_label.c_str();
+	}
+
+	virtual const char *GetPopupMenuLabel() override
+	{
+		return GetLabel();
+	}
+
+	virtual const char *GetLabel(int *size) override
+	{
+		*size = (int)m_label.size();
+		return m_label.c_str();
+	}
+
+	virtual int GetChildCount() override
+	{
+		return children.size();
+	}
+	
+	virtual std::string GetChangeDescriptionString() override
+	{
+		return "";
+	}
+
+	virtual bool has_changes() override
+	{
+		return false;
+	}
+
+	virtual bool start_iterator(int start_frame, int end_frame) override
+	{
+		return false;
+	}
+	virtual change_of_state* get_next() override
+	{
+		return nullptr;
+	}
+
+	virtual change_of_state* peek_next() override
+	{
+		return nullptr;
+	}
+	virtual change_of_state* get_latest() override
+	{
+		return nullptr;
+	}
 };
+
 
 // represents a data value / aka history node / aka a row in the grid
 struct grid_node
 {
-	grid_node(grid_node_data_if *data_in)
+	grid_node(TrackerNodeIF *data_in)
 		: data(data_in), 
 		  pos_y(0),
 		  height(0),
@@ -9859,7 +9916,7 @@ struct grid_node
 	{
 		return data->GetChangeDescriptionString();
 	}
-	grid_node_data_if *data;
+	TrackerNodeIF *data;
 	// gui specific
 	float			pos_y;
 	float			height;
@@ -10013,26 +10070,26 @@ struct event_node_cursor : change_of_state
 	typedef typename std::forward_list<FrameNumberedEvent, ALLOCATOR_TYPE>::iterator event_iter;
 	forward_ref<event_iter> m_ref;
 
-	int GetPrevFrameNumber() override
+	int GetPrevFrameNumber()  override
 	{
 		return m_ref.GetPrevFrameNumber();
 	}
 
-	virtual std::string GetPrevDescriptionString() override
+	virtual std::string GetPrevDescriptionString()  override
 	{
 		return m_ref.GetPrevDescriptionString();
 	}
 
-	virtual std::string GetChangeDescriptionString() override
+	virtual std::string GetChangeDescriptionString()  override
 	{
 		return m_ref.GetChangeDescriptionString();
 	}
 
-	virtual int GetFrameNumber() const override
+	virtual int GetFrameNumber()  override
 	{
 		return m_ref.GetFrameNumber();
 	}
-	virtual void *unique_id() override
+	virtual void *unique_id()  override
 	{
 		return m_ref.unique_id();
 	}
@@ -10064,7 +10121,7 @@ struct history_node_cos : change_of_state
 	{
 		return m_ref.GetChangeDescriptionString();
 	}
-	virtual int GetFrameNumber() const override
+	virtual int GetFrameNumber() override
 	{
 		return m_ref.GetFrameNumber();
 	}
@@ -10182,17 +10239,37 @@ struct cached_iterator
 	}
 };
 
-struct event_node_if : grid_node_data_if
+struct event_node_if : TrackerNodeIF
 {
 	tracker *s;
+	TrackerNodeIF *m_parent;
+	int m_index_in_parent;
+
 	typedef std::forward_list<FrameNumberedEvent, ALLOCATOR_TYPE>::iterator event_iterator;
 	cached_iterator <event_iterator> c_iter;
 	event_node_cursor current_event;	// this is the 'current event'
 
-	event_node_if(tracker *s_in)
-		: s(s_in)
+
+	event_node_if(tracker *s_in, TrackerNodeIF *parent, int index_in_parent)
+		: s(s_in),
+		m_parent(parent),
+		m_index_in_parent(index_in_parent)
 	{
 	}
+
+	virtual int GetChildCount() override
+	{
+		return 0;
+	}
+	virtual TrackerNodeIF *GetParent() override
+	{
+		return m_parent;
+	}
+	virtual int GetMyIndexInParent() override
+	{
+		return m_index_in_parent;
+	}
+
 	virtual const char *GetLabel() override
 	{
 		return "events";
@@ -10274,25 +10351,44 @@ struct event_node_if : grid_node_data_if
 };
 
 template <typename T, typename P, typename AllocatorT>
-struct history_node_if : grid_node_data_if
+struct history_node_if : TrackerNodeIF
 {
 	typedef history_base<T, P, AllocatorT> history_node;
 	typedef typename history_node::iter_type history_iter;
 
 	history_node *m_history_node;
+	TrackerNodeIF *m_parent;
+	int m_index_into_parent;
 
-	std::string m_path;
+	std::string m_path;				// todo replace this with a walk up the parent
 	std::string popup_menu_label;
 	std::string label;
 
 	cached_iterator <history_iter> c_iter;
 	history_node_cos<T, P, AllocatorT > current_cos;	// this is the 'current change of state
 
-	history_node_if(const std::string &path, history_node *base)
+	history_node_if(const std::string &path, history_node *base, TrackerNodeIF *parent, int index_into_parent)
 		:	m_history_node(base),
+			m_parent(parent),
+			m_index_into_parent(index_into_parent),
 			m_path(path),
 			popup_menu_label(base->name)
 	{
+	}
+
+	virtual TrackerNodeIF *GetParent() override
+	{
+		return m_parent;
+	}
+
+	virtual int GetMyIndexInParent() override
+	{
+		return m_index_into_parent;
+	}
+
+	int GetChildCount() override
+	{
+		return 0;
 	}
 
 	virtual const char *GetLabel( int *size ) override
@@ -10378,6 +10474,123 @@ struct history_node_if : grid_node_data_if
 	}
 };
 
+// constructs a vector of grid_nodes from the vr state
+struct TrackerNodeBuilder
+{
+	std::vector<vector_node_data_if*> m_parent_stack;
+	std::vector<std::string>path_stack;
+
+	std::vector<TrackerNodeIF*> *m_vec;
+
+
+	TrackerNodeBuilder(std::vector<TrackerNodeIF*> *vec, vector_node_data_if *root)
+		: m_vec(vec)
+	{
+		m_parent_stack.push_back(root);
+	}
+
+
+	template <typename T, typename P, typename AllocatorT>
+	void add_tracker_node(history_base<T, P, AllocatorT> *b)
+	{
+		std::string path;
+		for (auto iter = path_stack.begin(); iter != path_stack.end(); iter++)
+		{
+			path += *iter;
+			path += ".";
+		}
+		path += b->name;
+		vector_node_data_if* parent = m_parent_stack.back();
+		int my_index = parent->children.size();
+		TrackerNodeIF* data_if = new history_node_if<T, P, AllocatorT>(path, b, parent, my_index);
+		parent->children.push_back(data_if);
+		m_vec->push_back(data_if);
+	}
+
+	inline bool visit_source_interfaces() { return false; }
+	inline bool reload_render_models() { return true; }
+
+	inline void start_group_node(const char *group_id_name, int group_id_index)
+	{
+		std::string group_name;
+
+
+		if (group_id_index != -1)
+		{
+			group_name = std::string(group_id_name) + std::to_string(group_id_index);
+		}
+		else
+		{
+			group_name = std::string(group_id_name);
+		}
+
+		// create a node for this group
+		vector_node_data_if* parent = m_parent_stack.back();
+		int my_index = 0;
+		if (parent)
+			my_index = parent->children.size();
+
+		vector_node_data_if* data_if = new vector_node_data_if(group_name.c_str(), parent, my_index);
+		m_vec->push_back(data_if);
+
+		// push group node onto stacks
+		path_stack.push_back(group_name);
+		m_parent_stack.push_back(data_if);
+	}
+	inline void end_group_node(const char *group_id_name, int group_id_index)
+	{
+		path_stack.pop_back();
+		m_parent_stack.pop_back();
+	}
+
+	template <typename T>
+	inline void start_vector(const char *vector_name, T &vec)
+	{
+
+	}
+
+	template <typename T>
+	inline void end_vector(const char *vector_name, T &vec)
+	{}
+
+
+	// since P is passed as a param, this is the one that'll be chosen for history with P
+	template <typename T, typename P, typename allocatorT>
+	void visit_node(history<std::vector<T, allocatorT>, P, allocatorT> &node)
+	{
+		add_tracker_node(&node);
+	}
+
+	template <typename T, typename P, typename allocatorT>
+	void visit_node(history<T, P, allocatorT> &node)
+	{
+		add_tracker_node(&node);
+	}
+
+	EMPTY_RHS_TEMPLATE()
+};
+
+static TrackerNodeIF* build_tracker_tree(std::vector<TrackerNodeIF*> *all_nodes, tracker *s)
+{
+	vector_node_data_if *root = new vector_node_data_if("root", nullptr, 0);
+	all_nodes->push_back(root);
+
+	// add event row
+	TrackerNodeIF* event_data_if = new event_node_if(s, root, 0);
+	all_nodes->push_back(event_data_if);
+
+	// add row for each of the nodes in the vr state
+	TrackerNodeBuilder visitor(all_nodes, root);
+
+	openvr_broker::open_vr_interfaces null_interfaces;
+	openvr_broker::acquire_interfaces("null", &null_interfaces, nullptr);
+	traverse_history_graph_sequential(visitor, s, null_interfaces);
+
+	return root;
+}
+
+
+
 // this index is very important as it versions the grid
 // node sets.  it's used for stuff that caches state to know
 // if their data is valid_or_not
@@ -10392,75 +10605,7 @@ struct grid_node_set
 	std::vector<grid_node*> nodes;
 };
 
-// constructs a vector of grid_nodes from the vr state
-struct grid_visitor
-{
-	std::vector<std::string>path_stack;
-	std::vector<grid_node*> *m_vec;
-	
-	grid_visitor(std::vector<grid_node*> *vec)
-		: m_vec(vec)
-	{}
 
-	template <typename T, typename P, typename AllocatorT>
-	void add_grid_node(history_base<T,P,AllocatorT> *b)
-	{
-		std::string path;
-		for (auto iter = path_stack.begin(); iter != path_stack.end(); iter++)
-		{
-			path += *iter;
-			path += ".";
-		}
-		path += b->name;
-		grid_node_data_if* data_if = new history_node_if<T,P,AllocatorT>(path, b);
-		grid_node *node = new grid_node(data_if);
-		m_vec->push_back(node);
-	}
-
-	inline bool visit_source_interfaces() { return false; }
-	inline bool reload_render_models() { return true; }
-
-	inline void start_group_node(const char *group_id_name, int group_id_index) 
-	{
-		if (group_id_index != -1)
-		{
-			path_stack.push_back(std::string(group_id_name) + std::to_string(group_id_index));
-		}
-		else
-		{
-			path_stack.push_back(std::string(group_id_name));
-		}
-	}
-	inline void end_group_node(const char *group_id_name, int group_id_index) 
-	{
-		path_stack.pop_back();
-	}
-
-	template <typename T>
-	inline void start_vector(const char *vector_name, T &vec)
-	{
-	}
-
-	template <typename T>
-	inline void end_vector(const char *vector_name, T &vec)
-	{}
-
-
-	// since P is passed as a param, this is the one that'll be chosen for history with P
-	template <typename T, typename P, typename allocatorT>
-	void visit_node(history<std::vector<T, allocatorT>, P, allocatorT> &node)
-	{
-		add_grid_node(&node);
-	}
-
-	template <typename T, typename P, typename allocatorT>
-	void visit_node(history<T, P, allocatorT> &node)
-	{
-		add_grid_node(&node);
-	}
-
-	EMPTY_RHS_TEMPLATE()
-};
 
 // called at initialization time - creates the initial grid node set
 static void get_grid_nodes(grid_node_set &grid_nodes, int *num_frames, tracker *s)
@@ -10468,16 +10613,15 @@ static void get_grid_nodes(grid_node_set &grid_nodes, int *num_frames, tracker *
 	*num_frames = s->m_frame_number - 1;
 	grid_nodes.version_id = unique_grid_node_id++;
 
-	// add event row
-	grid_node_data_if* event_data_if = new event_node_if(s);
-	grid_node *node = new grid_node(event_data_if);
-	grid_nodes.nodes.push_back(node);
+	std::vector<TrackerNodeIF*> all_nodes;
+	build_tracker_tree(&all_nodes, s);
 
-	// add row for each of the nodes in the vr state
-	grid_visitor visitor(&grid_nodes.nodes);
-	openvr_broker::open_vr_interfaces null_interfaces;
-	openvr_broker::acquire_interfaces("null", &null_interfaces, nullptr);
-	traverse_history_graph_sequential(visitor, s, null_interfaces);
+	grid_nodes.nodes.reserve(all_nodes.size());
+	for (int i = 0; i < all_nodes.size(); i++)
+	{
+		TrackerNodeIF *data_if = all_nodes[i];
+		grid_nodes.nodes.push_back(new grid_node(data_if));
+	}
 }
 
 // user interface uses a couple regular expressions. 
@@ -10741,12 +10885,8 @@ public:
 template <size_t count>
 void strcpy_safe(char(&s)[count], const char* pSrc)
 {
-// #pragma warning(push)
-// #pragma warning( disable : 4996)
 	strcpy_s(s, count, pSrc);
-// #pragma warning(pop)
-//// Ensure null-termination.
-s[count-1] = 0;
+	s[count-1] = 0;
 }
 
 struct vr_gui_context
@@ -11066,7 +11206,8 @@ struct timeline_grid
 					{
 						colors_pushed = true;
 						ImColor col;
-						if (change->GetHovered())
+						// if (change->GetHovered())
+						if (0)
 						{
 							col = GetColorU32(ImGuiCol_TitleBgActive);
 							float h, s, v;

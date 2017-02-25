@@ -6,7 +6,6 @@
 #include "openvr_method_ids.h"
 #include "dprintf.h"
 #include <vrdelta.h>
-#include <assert.h>
 #include <thread>
 #include <chrono>
 
@@ -14,12 +13,12 @@
 static InterfacesIntoOpenVR raw;
 
 static bool snapshot_playback_mode = false;
-static bool snapshot_record_mode = true;
+static bool snapshot_record_mode = false;
 static bool submit_frames_to_real_compositor_during_playback = false;
 
 static bool events_since_last_refresh = false;
 static bool spy_mode = true;
-static bool train_tracker = false;
+static bool lock_step_train_tracker = false;
 
 static vr_state_tracker_t tracker;
 static vr_cursor_t cursor;
@@ -57,6 +56,54 @@ static void *vrapi_interfaces_cpppassalong[] =
 &VRResourcesCppPassalongInstance,
 };
 
+static void ReportFailure(const char *string, const char *file, int line)
+{
+	dprintf("%s %s %d\n", string, file, line);
+}
+
+#define TRAIN_TRACKER_ASSERT(cond) \
+if (!(cond)) \
+{ \
+ReportFailure(#cond, __FILE__, __LINE__); \
+} \
+else\
+{\
+}
+
+
+// utility class to implement lock-step-tracking
+struct TmpBuf
+{
+	void *      m_original_data;
+	void *		m_data;
+	uint32_t	m_size;
+
+	TmpBuf()
+		:m_data(nullptr)
+	{}
+	~TmpBuf()
+	{
+		if (m_data)
+			free(m_data);
+	}
+
+	char *val()
+	{
+		return (char *)m_data;
+	}
+
+	void dup(void *mem, uint32_t size)
+	{
+		m_original_data = mem;
+		m_data = malloc(size);
+		m_size = size;
+		memcpy(m_data, mem, size);
+	}
+	bool same()
+	{
+		return memcmp(m_original_data, m_data, m_size) == 0;
+	}
+};
 
 static void InitEmptyTracker()
 {
@@ -177,13 +224,13 @@ void VRSystemCppPassalong::GetRecommendedRenderTargetSize(uint32_t * pnWidth, ui
 
    m_sysi->GetRecommendedRenderTargetSize(pnWidth, pnHeight);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   uint32_t tw, th;
 	   tracker_cursor_interfaces.sysi->GetRecommendedRenderTargetSize(&tw, &th);
-	   assert(tw == *pnWidth);
-	   assert(th == *pnHeight);
+	   TRAIN_TRACKER_ASSERT(tw == *pnWidth);
+	   TRAIN_TRACKER_ASSERT(th == *pnHeight);
    }
 
    LOG_EXIT("CppPassalongGetRecommendedRenderTargetSize");
@@ -201,11 +248,11 @@ struct vr::HmdMatrix44_t VRSystemCppPassalong::GetProjectionMatrix(vr::EVREye eE
 	   update_vr_config_near_far(tracker, fNearZ, fFarZ);
    }
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::HmdMatrix44_t rc2 = tracker_cursor_interfaces.sysi->GetProjectionMatrix(eEye, fNearZ, fFarZ);
-	   assert(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongGetProjectionMatrix");
@@ -217,16 +264,16 @@ void VRSystemCppPassalong::GetProjectionRaw(vr::EVREye eEye, float * pfLeft, flo
 
    m_sysi->GetProjectionRaw(eEye, pfLeft, pfRight, pfTop, pfBottom);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   float pf[4];
 
 	   tracker_cursor_interfaces.sysi->GetProjectionRaw(eEye, &pf[0], &pf[1], &pf[2], &pf[3]);
-	   assert(pf[0] == *pfLeft);
-	   assert(pf[1] == *pfRight);
-	   assert(pf[2] == *pfTop);
-	   assert(pf[3] == *pfBottom);
+	   TRAIN_TRACKER_ASSERT(pf[0] == *pfLeft);
+	   TRAIN_TRACKER_ASSERT(pf[1] == *pfRight);
+	   TRAIN_TRACKER_ASSERT(pf[2] == *pfTop);
+	   TRAIN_TRACKER_ASSERT(pf[3] == *pfBottom);
    }
 
    LOG_EXIT("CppPassalongGetProjectionRaw");
@@ -239,14 +286,14 @@ bool VRSystemCppPassalong::ComputeDistortion(vr::EVREye eEye, float fU, float fV
    bool rc;
    rc = m_sysi->ComputeDistortion(eEye, fU, fV, pDistortionCoordinates);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   struct vr::DistortionCoordinates_t tracker_distortion;
 	   tracker_cursor_interfaces.sysi->ComputeDistortion(eEye, fU, fV, &tracker_distortion);
 	   if (pDistortionCoordinates)
 	   {
-		   assert(tracker_distortion == *pDistortionCoordinates);
+		   TRAIN_TRACKER_ASSERT(tracker_distortion == *pDistortionCoordinates);
 	   }
    }
    LOG_EXIT_RC(rc, "CppPassalongComputeDistortion");
@@ -259,11 +306,11 @@ struct vr::HmdMatrix34_t VRSystemCppPassalong::GetEyeToHeadTransform(vr::EVREye 
 	struct vr::HmdMatrix34_t rc;
 	rc = m_sysi->GetEyeToHeadTransform(eEye);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::HmdMatrix34_t rc2 = tracker_cursor_interfaces.sysi->GetEyeToHeadTransform(eEye);
-	   assert(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongGetEyeToHeadTransform");
@@ -276,7 +323,7 @@ bool VRSystemCppPassalong::GetTimeSinceLastVsync(float * pfSecondsSinceLastVsync
    bool rc;
    rc = m_sysi->GetTimeSinceLastVsync(pfSecondsSinceLastVsync, pulFrameCounter);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   float pfSeconds;
@@ -285,11 +332,11 @@ bool VRSystemCppPassalong::GetTimeSinceLastVsync(float * pfSecondsSinceLastVsync
 	   rc2 = tracker_cursor_interfaces.sysi->GetTimeSinceLastVsync(&pfSeconds, &pulCounter);
 	   if (pfSecondsSinceLastVsync)
 	   {
-		   //assert(pfSeconds == *pfSecondsSinceLastVsync);
+		   //TRAIN_TRACKER_ASSERT(pfSeconds == *pfSecondsSinceLastVsync);
 	   }
 	   if (pulCounter)
 	   {
-		   //assert(pulCounter == *pulFrameCounter);
+		   //TRAIN_TRACKER_ASSERT(pulCounter == *pulFrameCounter);
 	   }
    }
 
@@ -302,12 +349,12 @@ int32_t VRSystemCppPassalong::GetD3D9AdapterIndex()
    int32_t rc;
    rc = m_sysi->GetD3D9AdapterIndex();
     
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   int32_t tracker_adapter;
 	   tracker_adapter = tracker_cursor_interfaces.sysi->GetD3D9AdapterIndex();
-	   assert(tracker_adapter == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_adapter == rc);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongGetD3D9AdapterIndex");
@@ -319,12 +366,12 @@ void VRSystemCppPassalong::GetDXGIOutputInfo(int32_t * pnAdapterIndex)
 
    m_sysi->GetDXGIOutputInfo(pnAdapterIndex);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   int32_t ttracker;
 	   tracker_cursor_interfaces.sysi->GetDXGIOutputInfo(&ttracker);
-	   assert(*pnAdapterIndex == ttracker);
+	   TRAIN_TRACKER_ASSERT(*pnAdapterIndex == ttracker);
    }
    LOG_EXIT("CppPassalongGetDXGIOutputInfo");
 }
@@ -336,12 +383,12 @@ bool VRSystemCppPassalong::IsDisplayOnDesktop()
    bool rc;
    rc = m_sysi->IsDisplayOnDesktop();
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   bool rc2;
 	   rc2 = tracker_cursor_interfaces.sysi->IsDisplayOnDesktop();
-	   assert(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongIsDisplayOnDesktop");
@@ -362,7 +409,7 @@ void VRSystemCppPassalong::GetDeviceToAbsoluteTrackingPose(vr::ETrackingUniverse
 {
    LOG_ENTRY("CppPassalongGetDeviceToAbsoluteTrackingPose");
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   // to make it easier to memcmp
 	   memset(pTrackedDevicePoseArray, 0, unTrackedDevicePoseArrayCount * sizeof(unTrackedDevicePoseArrayCount));
@@ -370,7 +417,7 @@ void VRSystemCppPassalong::GetDeviceToAbsoluteTrackingPose(vr::ETrackingUniverse
 
    m_sysi->GetDeviceToAbsoluteTrackingPose(eOrigin, fPredictedSecondsToPhotonsFromNow, pTrackedDevicePoseArray, unTrackedDevicePoseArrayCount);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::TrackedDevicePose_t *tmp = (struct vr::TrackedDevicePose_t *)malloc(sizeof(vr::TrackedDevicePose_t) * unTrackedDevicePoseArrayCount);
@@ -378,7 +425,7 @@ void VRSystemCppPassalong::GetDeviceToAbsoluteTrackingPose(vr::ETrackingUniverse
 	   tracker_cursor_interfaces.sysi->GetDeviceToAbsoluteTrackingPose(eOrigin, fPredictedSecondsToPhotonsFromNow, tmp, unTrackedDevicePoseArrayCount);
 	   for (int i = 0; i < unTrackedDevicePoseArrayCount; i++)
 	   {
-		   assert(softcompare_is_similar(tmp[i], pTrackedDevicePoseArray[i], 0.0001f));
+		   TRAIN_TRACKER_ASSERT(softcompare_is_similar(tmp[i], pTrackedDevicePoseArray[i], 0.0001f));
 	   }
 	   free(tmp);
    }
@@ -402,11 +449,11 @@ struct vr::HmdMatrix34_t VRSystemCppPassalong::GetSeatedZeroPoseToStandingAbsolu
    struct vr::HmdMatrix34_t rc;
    rc = m_sysi->GetSeatedZeroPoseToStandingAbsoluteTrackingPose();
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::HmdMatrix34_t rc2 = tracker_cursor_interfaces.sysi->GetSeatedZeroPoseToStandingAbsoluteTrackingPose();
-	   assert(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongGetSeatedZeroPoseToStandingAbsoluteTrackingPose");
@@ -419,11 +466,11 @@ struct vr::HmdMatrix34_t VRSystemCppPassalong::GetRawZeroPoseToStandingAbsoluteT
    struct vr::HmdMatrix34_t rc;
    rc = m_sysi->GetRawZeroPoseToStandingAbsoluteTrackingPose();
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::HmdMatrix34_t rc2 = tracker_cursor_interfaces.sysi->GetRawZeroPoseToStandingAbsoluteTrackingPose();
-	   assert(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongGetRawZeroPoseToStandingAbsoluteTrackingPose");
@@ -435,7 +482,7 @@ uint32_t VRSystemCppPassalong::GetSortedTrackedDeviceIndicesOfClass(vr::ETracked
 {
    LOG_ENTRY("CppPassalongGetSortedTrackedDeviceIndicesOfClass");
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   memset(punTrackedDeviceIndexArray, 0, unTrackedDeviceIndexArrayCount * sizeof(vr::TrackedDeviceIndex_t));
    }
@@ -443,7 +490,7 @@ uint32_t VRSystemCppPassalong::GetSortedTrackedDeviceIndicesOfClass(vr::ETracked
    uint32_t rc = m_sysi->GetSortedTrackedDeviceIndicesOfClass(
 		   eTrackedDeviceClass, punTrackedDeviceIndexArray, unTrackedDeviceIndexArrayCount, unRelativeToTrackedDeviceIndex);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::TrackedDeviceIndex_t * tmp = (vr::TrackedDeviceIndex_t *) malloc(sizeof(vr::TrackedDeviceIndex_t) * unTrackedDeviceIndexArrayCount);
@@ -460,11 +507,11 @@ vr::EDeviceActivityLevel VRSystemCppPassalong::GetTrackedDeviceActivityLevel(vr:
    vr::EDeviceActivityLevel rc;
    rc = m_sysi->GetTrackedDeviceActivityLevel(unDeviceId);
    
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::EDeviceActivityLevel rc2 = tracker_cursor_interfaces.sysi->GetTrackedDeviceActivityLevel(unDeviceId);
-	   assert(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongGetTrackedDeviceActivityLevel");
@@ -477,20 +524,20 @@ void VRSystemCppPassalong::ApplyTransform(
 {
    LOG_ENTRY("CppPassalongApplyTransform");
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   memset(pOutputPose, 0, sizeof(*pOutputPose));
    }
 
    m_sysi->ApplyTransform(pOutputPose, pTrackedDevicePose, pTransform);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::TrackedDevicePose_t pose2;
 	   memset(&pose2, 0, sizeof(pose2));
 	   tracker_cursor_interfaces.sysi->ApplyTransform(&pose2, pTrackedDevicePose, pTransform);
-	   assert(memcmp(&pose2, pOutputPose, sizeof(pose2))==0);
+	   TRAIN_TRACKER_ASSERT(memcmp(&pose2, pOutputPose, sizeof(pose2))==0);
    }
 
    LOG_EXIT("CppPassalongApplyTransform");
@@ -503,11 +550,11 @@ vr::TrackedDeviceIndex_t VRSystemCppPassalong::GetTrackedDeviceIndexForControlle
 
 	rc = m_sysi->GetTrackedDeviceIndexForControllerRole(unDeviceType);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::TrackedDeviceIndex_t tracker_rc = tracker_cursor_interfaces.sysi->GetTrackedDeviceIndexForControllerRole(unDeviceType);
-	   assert(tracker_rc == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_rc == rc);
    }
    LOG_EXIT_RC(rc, "CppPassalongGetTrackedDeviceIndexForControllerRole");
 }
@@ -520,11 +567,11 @@ vr::ETrackedControllerRole VRSystemCppPassalong::GetControllerRoleForTrackedDevi
 	rc = m_sysi->GetControllerRoleForTrackedDeviceIndex(unDeviceIndex);
    
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::ETrackedControllerRole tracker_rc = tracker_cursor_interfaces.sysi->GetControllerRoleForTrackedDeviceIndex(unDeviceIndex);
-	   assert(tracker_rc == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_rc == rc);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongGetControllerRoleForTrackedDeviceIndex");
@@ -537,11 +584,11 @@ vr::ETrackedDeviceClass VRSystemCppPassalong::GetTrackedDeviceClass(vr::TrackedD
    vr::ETrackedDeviceClass rc;
    rc = m_sysi->GetTrackedDeviceClass(unDeviceIndex);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::ETrackedDeviceClass tracker_rc = tracker_cursor_interfaces.sysi->GetTrackedDeviceClass(unDeviceIndex);
-	   assert(tracker_rc == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_rc == rc);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongGetTrackedDeviceClass");
@@ -554,11 +601,11 @@ bool VRSystemCppPassalong::IsTrackedDeviceConnected(vr::TrackedDeviceIndex_t unD
    bool rc;
 	rc = m_sysi->IsTrackedDeviceConnected(unDeviceIndex);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   bool tracker_rc = tracker_cursor_interfaces.sysi->IsTrackedDeviceConnected(unDeviceIndex);
-	   assert(tracker_rc == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_rc == rc);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongIsTrackedDeviceConnected");
@@ -572,15 +619,15 @@ bool VRSystemCppPassalong::GetBoolTrackedDeviceProperty(vr::TrackedDeviceIndex_t
    bool rc;
 	rc = m_sysi->GetBoolTrackedDeviceProperty(unDeviceIndex, prop, pError);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::ETrackedPropertyError tracker_err;
 	   bool tracker_rc = tracker_cursor_interfaces.sysi->GetBoolTrackedDeviceProperty(unDeviceIndex, prop, &tracker_err);
-	   assert(tracker_rc == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_rc == rc);
 	   if (pError)
 	   {
-		   assert(*pError == tracker_err);
+		   TRAIN_TRACKER_ASSERT(*pError == tracker_err);
 	   }
    }
 
@@ -595,15 +642,15 @@ float VRSystemCppPassalong::GetFloatTrackedDeviceProperty(vr::TrackedDeviceIndex
    float rc;
    rc = m_sysi->GetFloatTrackedDeviceProperty(unDeviceIndex, prop, pError);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::ETrackedPropertyError tracker_err;
 	   float tracker_rc = tracker_cursor_interfaces.sysi->GetFloatTrackedDeviceProperty(unDeviceIndex, prop, &tracker_err);
-	   assert(tracker_rc == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_rc == rc);
 	   if (pError)
 	   {
-		   assert(*pError == tracker_err);
+		   TRAIN_TRACKER_ASSERT(*pError == tracker_err);
 	   }
    }
 
@@ -617,15 +664,15 @@ int32_t VRSystemCppPassalong::GetInt32TrackedDeviceProperty(vr::TrackedDeviceInd
    int32_t rc;
    rc = m_sysi->GetInt32TrackedDeviceProperty(unDeviceIndex, prop, pError);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::ETrackedPropertyError tracker_err;
 	   int32_t tracker_rc = tracker_cursor_interfaces.sysi->GetInt32TrackedDeviceProperty(unDeviceIndex, prop, &tracker_err);
-	   assert(tracker_rc == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_rc == rc);
 	   if (pError)
 	   {
-		   assert(*pError == tracker_err);
+		   TRAIN_TRACKER_ASSERT(*pError == tracker_err);
 	   }
    }
 
@@ -638,15 +685,15 @@ uint64_t VRSystemCppPassalong::GetUint64TrackedDeviceProperty(vr::TrackedDeviceI
    uint64_t rc;
    rc = m_sysi->GetUint64TrackedDeviceProperty(unDeviceIndex, prop, pError);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::ETrackedPropertyError tracker_err;
 	   uint64_t tracker_rc = tracker_cursor_interfaces.sysi->GetUint64TrackedDeviceProperty(unDeviceIndex, prop, &tracker_err);
-	   assert(tracker_rc == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_rc == rc);
 	   if (pError)
 	   {
-		   assert(*pError == tracker_err);
+		   TRAIN_TRACKER_ASSERT(*pError == tracker_err);
 	   }
    }
 
@@ -661,15 +708,15 @@ struct vr::HmdMatrix34_t VRSystemCppPassalong::GetMatrix34TrackedDeviceProperty(
 	struct vr::HmdMatrix34_t rc;
 	rc = m_sysi->GetMatrix34TrackedDeviceProperty(unDeviceIndex, prop, pError);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::ETrackedPropertyError tracker_err;
 	   vr::HmdMatrix34_t tracker_rc = tracker_cursor_interfaces.sysi->GetMatrix34TrackedDeviceProperty(unDeviceIndex, prop, &tracker_err);
-	   assert(tracker_rc == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_rc == rc);
 	   if (pError)
 	   {
-		   assert(*pError == tracker_err);
+		   TRAIN_TRACKER_ASSERT(*pError == tracker_err);
 	   }
    }
 
@@ -685,7 +732,7 @@ uint32_t VRSystemCppPassalong::GetStringTrackedDeviceProperty(
    uint32_t rc;
 	rc = m_sysi->GetStringTrackedDeviceProperty(unDeviceIndex, prop, pchValue, unBufferSize, pError);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   char *tracker_buf = (char *)malloc(unBufferSize);
@@ -694,12 +741,12 @@ uint32_t VRSystemCppPassalong::GetStringTrackedDeviceProperty(
 		   unDeviceIndex, prop, tracker_buf, unBufferSize, &tracker_err);
 	   if (pchValue)
 	   {
-		   assert(strcmp(tracker_buf, pchValue) == 0);
+		   TRAIN_TRACKER_ASSERT(strcmp(tracker_buf, pchValue) == 0);
 	   }
-	   assert(tracker_rc == rc);
+	   TRAIN_TRACKER_ASSERT(tracker_rc == rc);
 	   if (pError)
 	   {
-		   assert(*pError == tracker_err);
+		   TRAIN_TRACKER_ASSERT(*pError == tracker_err);
 	   }
 	   free(tracker_buf);
    }
@@ -775,20 +822,20 @@ struct vr::HiddenAreaMesh_t VRSystemCppPassalong::GetHiddenAreaMesh(vr::EVREye e
 
 	rc = m_sysi->GetHiddenAreaMesh(eEye, type);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 
 	   struct vr::HiddenAreaMesh_t tracker_rc = tracker_cursor_interfaces.sysi->GetHiddenAreaMesh(eEye, type);
-	   assert(tracker_rc.unTriangleCount == rc.unTriangleCount);
+	   TRAIN_TRACKER_ASSERT(tracker_rc.unTriangleCount == rc.unTriangleCount);
 
 	   if (type == vr::k_eHiddenAreaMesh_LineLoop)
 	   {
-		   assert(memcmp(rc.pVertexData, tracker_rc.pVertexData, tracker_rc.unTriangleCount * sizeof(vr::HmdVector2_t)) == 0);
+		   TRAIN_TRACKER_ASSERT(memcmp(rc.pVertexData, tracker_rc.pVertexData, tracker_rc.unTriangleCount * sizeof(vr::HmdVector2_t)) == 0);
 	   }
 	   else
 	   {
-		   assert(memcmp(rc.pVertexData, tracker_rc.pVertexData, 3 * tracker_rc.unTriangleCount * sizeof(vr::HmdVector2_t)) == 0);
+		   TRAIN_TRACKER_ASSERT(memcmp(rc.pVertexData, tracker_rc.pVertexData, 3 * tracker_rc.unTriangleCount * sizeof(vr::HmdVector2_t)) == 0);
 	   }
    }
 
@@ -805,14 +852,17 @@ bool VRSystemCppPassalong::GetControllerState(
 	rc = m_sysi->GetControllerState(unControllerDeviceIndex,
 		   pControllerState, unControllerStateSize);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::VRControllerState_t tracker_state;
 	   bool tracker_rc = tracker_cursor_interfaces.sysi->GetControllerState(unControllerDeviceIndex,
 									&tracker_state, sizeof(vr::VRControllerState_t));
-	   assert(rc == tracker_rc);
-	   assert(tracker_state == *pControllerState); // time desync
+	   TRAIN_TRACKER_ASSERT(rc == tracker_rc);
+
+	   int score = softcompare_controllerstates(&tracker_state, pControllerState);
+	   TRAIN_TRACKER_ASSERT(score < 7);
+	   // time desync, e.g the packet numbers will be different.
    }
 
    LOG_EXIT_RC(rc, "CppPassalongGetControllerState");
@@ -829,7 +879,7 @@ bool VRSystemCppPassalong::GetControllerStateWithPose(
 	bool rc = m_sysi->GetControllerStateWithPose(
 		   eOrigin, unControllerDeviceIndex, pControllerState, unControllerStateSize, pTrackedDevicePose);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::VRControllerState_t tracker_controller_state;
@@ -838,9 +888,9 @@ bool VRSystemCppPassalong::GetControllerStateWithPose(
 	   bool tracker_rc = tracker_cursor_interfaces.sysi->GetControllerStateWithPose(
 		   eOrigin, unControllerDeviceIndex, &tracker_controller_state, unControllerStateSize, &tracker_pose);
 
-	   assert(rc == tracker_rc);
-	   assert(tracker_controller_state == *pControllerState); // time desync
-	   assert(tracker_pose == *pTrackedDevicePose);
+	   TRAIN_TRACKER_ASSERT(rc == tracker_rc);
+	   TRAIN_TRACKER_ASSERT(tracker_controller_state == *pControllerState); // time desync
+	   TRAIN_TRACKER_ASSERT(tracker_pose == *pTrackedDevicePose);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongGetControllerStateWithPose");
@@ -891,11 +941,11 @@ bool VRSystemCppPassalong::IsInputFocusCapturedByAnotherProcess()
    LOG_ENTRY("CppPassalongIsInputFocusCapturedByAnotherProcess");
    bool rc = m_sysi->IsInputFocusCapturedByAnotherProcess();
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   bool tracker_rc = tracker_cursor_interfaces.sysi->IsInputFocusCapturedByAnotherProcess();
-	   assert(rc == tracker_rc);
+	   TRAIN_TRACKER_ASSERT(rc == tracker_rc);
    }
 
    LOG_EXIT_RC(rc, "CppPassalongIsInputFocusCapturedByAnotherProcess");
@@ -935,6 +985,23 @@ void VRExtendedDisplayCppPassalong::GetWindowBounds(int32_t * pnX, int32_t * pnY
 {
    LOG_ENTRY("CppPassalongGetWindowBounds");
    m_exdi->GetWindowBounds(pnX,pnY,pnWidth,pnHeight);
+
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   int32_t i[2];
+	   uint32_t j[2];
+	   tracker_cursor_interfaces.exdi->GetWindowBounds(&i[0], &i[1], &j[0], &j[1]);
+	   if (pnX)
+		   TRAIN_TRACKER_ASSERT(*pnX == i[0]);
+	   if (pnY)
+		   TRAIN_TRACKER_ASSERT(*pnY == i[1]);
+	   if (pnWidth)
+		   TRAIN_TRACKER_ASSERT(*pnWidth == j[0]);
+	   if (pnHeight)
+		   TRAIN_TRACKER_ASSERT(*pnHeight == j[1]);
+   }
+
    LOG_EXIT("CppPassalongGetWindowBounds");
 }
 
@@ -2337,17 +2404,44 @@ void VRRenderModelsCppPassalong::FreeTextureD3D11(void * pD3D11Texture2D)
    LOG_EXIT("CppPassalongFreeTextureD3D11");
 }
 
+
+
 uint32_t VRRenderModelsCppPassalong::GetRenderModelName(uint32_t unRenderModelIndex, char * pchRenderModelName, uint32_t unRenderModelNameLen)
 {
    LOG_ENTRY("CppPassalongGetRenderModelName");
-   uint32_t rc = m_remi->GetRenderModelName(unRenderModelIndex,pchRenderModelName,unRenderModelNameLen);
+
+   TmpBuf buf;
+   if (lock_step_train_tracker)
+   {
+	   buf.dup(pchRenderModelName, unRenderModelNameLen);
+   }
+
+   uint32_t rc = m_remi->GetRenderModelName(unRenderModelIndex, pchRenderModelName, unRenderModelNameLen);
+
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   uint32_t rc2 = tracker_cursor_interfaces.remi->GetRenderModelName(unRenderModelIndex, buf.val(), unRenderModelNameLen);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(buf.same());	
+   }
+
    LOG_EXIT_RC(rc, "CppPassalongGetRenderModelName");
 }
 
 uint32_t VRRenderModelsCppPassalong::GetRenderModelCount()
 {
    LOG_ENTRY("CppPassalongGetRenderModelCount");
+
    uint32_t rc = m_remi->GetRenderModelCount();
+
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   uint32_t rc2 = tracker_cursor_interfaces.remi->GetRenderModelCount();
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
+   }
+
    LOG_EXIT_RC(rc, "CppPassalongGetRenderModelCount");
 }
 
@@ -2355,55 +2449,185 @@ uint32_t VRRenderModelsCppPassalong::GetComponentCount(const char * pchRenderMod
 {
    LOG_ENTRY("CppPassalongGetComponentCount");
    uint32_t rc = m_remi->GetComponentCount(pchRenderModelName);
+
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   uint32_t rc2 = tracker_cursor_interfaces.remi->GetComponentCount(pchRenderModelName);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
+   }
+
    LOG_EXIT_RC(rc, "CppPassalongGetComponentCount");
 }
 
-uint32_t VRRenderModelsCppPassalong::GetComponentName(const char * pchRenderModelName, uint32_t unComponentIndex, char * pchComponentName, uint32_t unComponentNameLen)
+uint32_t VRRenderModelsCppPassalong::GetComponentName(
+		const char * pchRenderModelName, 
+		uint32_t unComponentIndex, 
+		char * pchComponentName, uint32_t unComponentNameLen)
 {
    LOG_ENTRY("CppPassalongGetComponentName");
+
+   TmpBuf buf;
+   if (lock_step_train_tracker)
+   {
+	   buf.dup(pchComponentName, unComponentNameLen);
+   }
+
    uint32_t rc = m_remi->GetComponentName(pchRenderModelName,unComponentIndex,pchComponentName,unComponentNameLen);
+
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   uint32_t rc2 = tracker_cursor_interfaces.remi->GetComponentName(pchRenderModelName, unComponentIndex, buf.val(), unComponentNameLen);
+	   TRAIN_TRACKER_ASSERT(rc2 == rc);
+	   TRAIN_TRACKER_ASSERT(buf.same());
+   }
+
    LOG_EXIT_RC(rc, "CppPassalongGetComponentName");
 }
 
 uint64_t VRRenderModelsCppPassalong::GetComponentButtonMask(const char * pchRenderModelName, const char * pchComponentName)
 {
    LOG_ENTRY("CppPassalongGetComponentButtonMask");
+
    uint64_t rc = m_remi->GetComponentButtonMask(pchRenderModelName,pchComponentName);
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   uint64_t rc2 = tracker_cursor_interfaces.remi->GetComponentButtonMask(pchRenderModelName, pchComponentName);
+	   TRAIN_TRACKER_ASSERT(rc2 == rc);
+   }
+
    LOG_EXIT_RC(rc, "CppPassalongGetComponentButtonMask");
 }
 
-uint32_t VRRenderModelsCppPassalong::GetComponentRenderModelName(const char * pchRenderModelName, const char * pchComponentName, char * pchComponentRenderModelName, uint32_t unComponentRenderModelNameLen)
+uint32_t VRRenderModelsCppPassalong::GetComponentRenderModelName(const char * pchRenderModelName, const char * pchComponentName, 
+	char * pchComponentRenderModelName, uint32_t unComponentRenderModelNameLen)
 {
    LOG_ENTRY("CppPassalongGetComponentRenderModelName");
-   uint32_t rc = m_remi->GetComponentRenderModelName(pchRenderModelName,pchComponentName,pchComponentRenderModelName,unComponentRenderModelNameLen);
+  
+   TmpBuf buf;
+   if (lock_step_train_tracker)
+   {
+	   buf.dup(pchComponentRenderModelName, unComponentRenderModelNameLen);
+   }
+
+   uint32_t rc = m_remi->GetComponentRenderModelName(
+							pchRenderModelName,pchComponentName,pchComponentRenderModelName,unComponentRenderModelNameLen);
+
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   uint32_t rc2 = tracker_cursor_interfaces.remi->GetComponentRenderModelName(
+		   pchRenderModelName, pchComponentName, buf.val(), unComponentRenderModelNameLen);
+
+	   TRAIN_TRACKER_ASSERT(rc2 == rc);
+	   TRAIN_TRACKER_ASSERT(buf.same());
+   }
+
    LOG_EXIT_RC(rc, "CppPassalongGetComponentRenderModelName");
 }
 
-bool VRRenderModelsCppPassalong::GetComponentState(const char * pchRenderModelName, const char * pchComponentName, const vr::VRControllerState_t * pControllerState, const struct vr::RenderModel_ControllerMode_State_t * pState, struct vr::RenderModel_ComponentState_t * pComponentState)
+bool VRRenderModelsCppPassalong::GetComponentState(
+	const char * pchRenderModelName, 
+	const char * pchComponentName, 
+	const vr::VRControllerState_t * pControllerState, 
+	const struct vr::RenderModel_ControllerMode_State_t * pState, 
+	struct vr::RenderModel_ComponentState_t * pComponentState)
 {
    LOG_ENTRY("CppPassalongGetComponentState");
+
    bool rc = m_remi->GetComponentState(pchRenderModelName,pchComponentName,pControllerState,pState,pComponentState);
+
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   vr::RenderModel_ComponentState_t component_state2;
+	   bool rc2 = tracker_cursor_interfaces.remi->GetComponentState(
+		   pchRenderModelName, pchComponentName, pControllerState, pState, &component_state2);
+
+	   TRAIN_TRACKER_ASSERT(rc2 == rc);
+	   if (pComponentState)
+	   {
+		   TRAIN_TRACKER_ASSERT(*pComponentState == component_state2);
+	   }
+   }
+
    LOG_EXIT_RC(rc, "CppPassalongGetComponentState");
 }
 
 bool VRRenderModelsCppPassalong::RenderModelHasComponent(const char * pchRenderModelName, const char * pchComponentName)
 {
    LOG_ENTRY("CppPassalongRenderModelHasComponent");
+
    bool rc = m_remi->RenderModelHasComponent(pchRenderModelName,pchComponentName);
+
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   bool rc2 = tracker_cursor_interfaces.remi->RenderModelHasComponent(
+													pchRenderModelName, pchComponentName);
+
+	   TRAIN_TRACKER_ASSERT(rc2 == rc);
+   }
+
    LOG_EXIT_RC(rc, "CppPassalongRenderModelHasComponent");
 }
 
-uint32_t VRRenderModelsCppPassalong::GetRenderModelThumbnailURL(const char * pchRenderModelName, char * pchThumbnailURL, uint32_t unThumbnailURLLen, vr::EVRRenderModelError * peError)
+uint32_t VRRenderModelsCppPassalong::GetRenderModelThumbnailURL(
+		const char * pchRenderModelName, 
+		char * pchThumbnailURL, uint32_t unThumbnailURLLen, vr::EVRRenderModelError * peError)
 {
    LOG_ENTRY("CppPassalongGetRenderModelThumbnailURL");
+
+   TmpBuf buf;
+   if (lock_step_train_tracker)
+   {
+	   buf.dup(pchThumbnailURL, unThumbnailURLLen);
+   }
+
    uint32_t rc = m_remi->GetRenderModelThumbnailURL(pchRenderModelName,pchThumbnailURL,unThumbnailURLLen,peError);
+
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   vr::EVRRenderModelError error2;
+	   uint32_t rc2 = tracker_cursor_interfaces.remi->GetRenderModelThumbnailURL(
+		   pchRenderModelName, buf.val(), unThumbnailURLLen, &error2);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(buf.same());
+	   if (peError)
+	   {
+		   TRAIN_TRACKER_ASSERT(*peError == error2);
+	   }
+   }
    LOG_EXIT_RC(rc, "CppPassalongGetRenderModelThumbnailURL");
 }
 
-uint32_t VRRenderModelsCppPassalong::GetRenderModelOriginalPath(const char * pchRenderModelName, char * pchOriginalPath, uint32_t unOriginalPathLen, vr::EVRRenderModelError * peError)
+uint32_t VRRenderModelsCppPassalong::GetRenderModelOriginalPath(
+	const char * pchRenderModelName, 
+	char * pchOriginalPath, uint32_t unOriginalPathLen, vr::EVRRenderModelError * peError)
 {
    LOG_ENTRY("CppPassalongGetRenderModelOriginalPath");
+
+   TmpBuf buf;
+   if (lock_step_train_tracker)
+   {
+	   buf.dup(pchOriginalPath, unOriginalPathLen);
+   }
+
    uint32_t rc = m_remi->GetRenderModelOriginalPath(pchRenderModelName,pchOriginalPath,unOriginalPathLen,peError);
+
+   if (lock_step_train_tracker)
+   {
+	   RefreshTracker();
+	   vr::EVRRenderModelError error2;
+	   uint32_t rc2 = tracker_cursor_interfaces.remi->GetRenderModelOriginalPath(
+		   pchRenderModelName, buf.val(), unOriginalPathLen, &error2);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(buf.same());
+   }
+
    LOG_EXIT_RC(rc, "CppPassalongGetRenderModelOriginalPath");
 }
 
@@ -2504,15 +2728,15 @@ bool VRSettingsCppPassalong::GetBool(const char * pchSection, const char * pchSe
    
    bool rc = m_seti->GetBool(pchSection,pchSettingsKey,peError);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::EVRSettingsError tracker_error;
 	   bool rc2 = tracker_cursor_interfaces.seti->GetBool(pchSection, pchSettingsKey, &tracker_error);
-	   assert(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
 	   if (peError)
 	   {
-		   assert(tracker_error == *peError);
+		   TRAIN_TRACKER_ASSERT(tracker_error == *peError);
 	   }
    }
 
@@ -2524,15 +2748,15 @@ int32_t VRSettingsCppPassalong::GetInt32(const char * pchSection, const char * p
    LOG_ENTRY("CppPassalongGetInt32");
    int32_t rc = m_seti->GetInt32(pchSection,pchSettingsKey,peError);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::EVRSettingsError tracker_error;
 	   int32_t rc2 = tracker_cursor_interfaces.seti->GetInt32(pchSection, pchSettingsKey, &tracker_error);
-	   assert(rc == rc2);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
 	   if (peError)
 	   {
-		   assert(tracker_error == *peError);
+		   TRAIN_TRACKER_ASSERT(tracker_error == *peError);
 	   }
    }
 
@@ -2546,15 +2770,15 @@ float VRSettingsCppPassalong::GetFloat(const char * pchSection, const char * pch
    
    float rc = m_seti->GetFloat(pchSection,pchSettingsKey,peError);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();
 	   vr::EVRSettingsError tracker_error;
-	   float rc2 = tracker_cursor_interfaces.seti->GetInt32(pchSection, pchSettingsKey, &tracker_error);
-	   assert(rc == rc2);
+	   float rc2 = tracker_cursor_interfaces.seti->GetFloat(pchSection, pchSettingsKey, &tracker_error);
+	   TRAIN_TRACKER_ASSERT(rc == rc2);
 	   if (peError)
 	   {
-		   assert(tracker_error == *peError);
+		   TRAIN_TRACKER_ASSERT(tracker_error == *peError);
 	   }
    }
 
@@ -2565,7 +2789,7 @@ void VRSettingsCppPassalong::GetString(const char * pchSection, const char * pch
 {
    LOG_ENTRY("CppPassalongGetString");
    char *buf;
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   if (unValueLen > 0)
 	   {
@@ -2576,16 +2800,16 @@ void VRSettingsCppPassalong::GetString(const char * pchSection, const char * pch
 
    m_seti->GetString(pchSection,pchSettingsKey,pchValue,unValueLen,peError);
 
-   if (train_tracker)
+   if (lock_step_train_tracker)
    {
 	   RefreshTracker();   
 	   vr::EVRSettingsError tracker_error;
 	   tracker_cursor_interfaces.seti->GetString(pchSection, pchSettingsKey, buf, unValueLen, &tracker_error);
 	   if (peError)
 	   {
-		   assert(tracker_error == *peError);
+		   TRAIN_TRACKER_ASSERT(tracker_error == *peError);
 	   }
-	   assert(memcmp(buf, pchValue, unValueLen) == 0);
+	   TRAIN_TRACKER_ASSERT(memcmp(buf, pchValue, unValueLen) == 0);
 	   free(buf);
    }
 

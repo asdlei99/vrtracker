@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include "openvr_broker.h"
+#include "tinyfiledialogs.h"
 
 #if 0
 void virtual_memory_play()
@@ -283,12 +284,36 @@ int profiler_main()
             if (ImGui::Button("AllState")) show_all_state ^= 1;
 			if (ImGui::Button("LoadState"))
 			{
-				vr_state_tracker_t new_file = load_vrstate_from_file("c:\\vr_streams\\profiler_default.bin");
-				job.vr_state_tracker = new_file;
+				char const * lFilterPatterns[] = { "*.bin" };
+				char const * lTheOpenFileName;
+				lTheOpenFileName = tinyfd_openFileDialog(
+					"Load...",
+					"C:\\vr_streams\\",
+					1,
+					lFilterPatterns,
+					NULL,
+					1);
+				if (lTheOpenFileName)
+				{
+					vr_state_tracker_t new_file = load_vrstate_from_file(lTheOpenFileName);
+					job.vr_state_tracker = new_file;
+				}
 			}
 			if (ImGui::Button("SaveState"))
 			{
-				save_vrstate_to_file(job.vr_state_tracker, "c:\\vr_streams\\profiler_default.bin", true);
+				char const * lFilterPatterns[] = { "*.bin" };
+				char const * lTheSaveFileName;
+				lTheSaveFileName = tinyfd_saveFileDialog(
+					"Save...",
+					"C:\\vr_streams\\",
+					1,
+					lFilterPatterns,
+					NULL);
+				if (lTheSaveFileName)
+				{
+					save_vrstate_to_file(job.vr_state_tracker, lTheSaveFileName, true);	
+				}
+				
 			}
 			if (ImGui::Button("Discrete Data"))
 			{

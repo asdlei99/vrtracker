@@ -18,6 +18,7 @@ InterfaceAuditor::InterfaceAuditor()
 
 void InterfaceAuditor::PrintResults()
 {
+	dprintf("Audit took %d us\n", std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count());
 	dprintf(" %d passes\n", num_passes);
 	dprintf(" %d waives\n", num_waivers);
 	dprintf(" %d failures\n", num_failures);
@@ -40,6 +41,9 @@ void InterfaceAuditor::AuditInterfaces(
 	bool large_time_gap_override,
 	bool do_interactive)
 {
+	start_time = std::chrono::steady_clock::now();
+	
+
 	ia->Refresh();
 	ib->Refresh();
 	compare_sysi_interfaces(ia, ib, c);
@@ -59,6 +63,11 @@ void InterfaceAuditor::AuditInterfaces(
 	{
 		interactive_component_state_test(ia, ib);
 	}
+	end_time = std::chrono::steady_clock::now();
+
+	
+		
+
 }
 
 void InterfaceAuditor::compare_resi_interfaces(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib, const TrackerConfig &c)

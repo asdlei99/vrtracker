@@ -65,6 +65,9 @@
     <ClCompile Include="openvr_indexers.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\externals\tinyfile\tinyfiledialogs.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dprintf.h">
@@ -109,5 +112,6 @@
     <ClInclude Include="openvr_hash.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\externals\tinyfile\tinyfiledialogs.h" />
   </ItemGroup>
 </Project>

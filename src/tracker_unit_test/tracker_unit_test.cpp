@@ -328,14 +328,62 @@ void chain_cursor_object_test()
 	auditor.PrintResults();
 }
 
+void run_perf_test()
+{
+	RawInterface raw;
+	raw.Init();
+	RawInterface raw2;
+	raw2.Init();
+	TrackerConfig c;
+	c.set_default();
+	InterfaceAuditor auditor;
 
+	
+	auditor.AuditInterfaces(&raw, &raw2, c, true, false, false);
+
+	dprintf("done");
+
+	FileBasedInterface fileA;
+	fileA.Init("c:\\vr_streams\\unit_test1.bin");
+	FileBasedInterface fileB;
+	fileB.Init("c:\\vr_streams\\unit_test1.bin");
+	auditor.AuditInterfaces(&fileA, &fileB, c, true, false, false);
+	dprintf("done");
+
+	{
+		RawInterface raw;
+		raw.Init();
+
+		CursorBasedInterface cursorA;	// cursor A is attached to a Raw Source - so it will wobble
+		cursorA.Init(c, raw.Get());
+		cursorA.SaveToFile("c:\\vr_streams\\unit_test.bin", true);
+
+		cursorA.Refresh();
+		cursorA.SaveToFile("c:\\vr_streams\\unit_test1.bin", true);  // save to a file
+
+		FileBasedInterface fileA;
+		fileA.Init("c:\\vr_streams\\unit_test1.bin");  // load the file
+
+													   // readonly tests here because since fileA is a file, it's setter functions are 'stubs'  passive and will fail if you try and read and write from it
+		bool read_only = true;
+
+		bool interactive = false;
+		bool large_time_gap_override = true;
+		InterfaceAuditor auditor;
+		auditor.AuditInterfaces(&cursorA, &fileA, c, read_only, large_time_gap_override, interactive);
+		auditor.PrintResults();
+	}
+}
 
 int main()
 {
+#if 0
 	run_raw_vs_tracker_audit_test();
 	run_serialization_test();
 	chain_cursor_object_test();	// has a dependency on run_serialization_test
+#endif
 
+	run_perf_test();
 	
 	return 0;
 }

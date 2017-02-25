@@ -106,7 +106,8 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>OPENVR_STRINGS_DISABLE_PASSTHRU;HAVE_IMG_GUI;HAVE_OPEN_VR_RAW;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;..\externals\gl3w\include;..\externals\pcre2-10.22\cmake-sean;$(OPENVR_BASE)/headers;$(OPENVR_BASE)/samples;C:\projects\vrstrings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -143,6 +144,7 @@
     <ClCompile Include="..\externals\imgui\imgui_demo.cpp" />
     <ClCompile Include="..\externals\imgui\imgui_draw.cpp" />
     <ClCompile Include="..\externals\imgui\imgui_impl_sdl_gl3.cpp" />
+    <ClCompile Include="..\externals\tinyfile\tinyfiledialogs.c" />
     <ClCompile Include="dprintf.cpp" />
     <ClCompile Include="InterfacesIntoOpenVR.cpp" />
     <ClCompile Include="openvr_cppstub.cpp" />
@@ -150,6 +152,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="openvr_indexers.cpp" />
     <ClCompile Include="slaballocator.cpp" />
@@ -158,6 +161,7 @@
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\externals\tinyfile\tinyfiledialogs.h" />
     <ClInclude Include="dprintf.h" />
     <ClInclude Include="InterfacesIntoOpenVR.h" />
     <ClInclude Include="openvr_broker.h" />
