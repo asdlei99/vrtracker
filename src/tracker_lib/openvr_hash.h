@@ -2,6 +2,9 @@
 #include <openvr.h>
 #include <unordered_map>
 
+// needs to be tested  - ie I don't think it really needs to go though
+// the entire string to build a seed
+
 struct hash_c_string {
 	void hash_combine(uint32_t& seed, char v) const {
 		seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);

@@ -39,7 +39,7 @@ static VRSettingsCppPassalong VRSettingsCppPassalongInstance;
 static VRScreenshotsCppPassalong VRScreenshotsCppPassalongInstance;
 static VRResourcesCppPassalong VRResourcesCppPassalongInstance;
 
-static void *vrapi_interfaces_cpppassalong[] =
+static void *upstream_interfaces_cpppassalong[] =
 {
 &VRSystemCppPassalongInstance,
 &VRApplicationsCppPassalongInstance,
@@ -71,7 +71,8 @@ else\
 }
 
 
-// utility class to implement lock-step-tracking
+// utility class to memcopy data before and after a function call 
+// to determine if the function call modified anything
 struct TmpBuf
 {
 	void *      m_original_data;
@@ -208,7 +209,7 @@ public:
 	
 	virtual void** GetAPIInterfaceHandles()
 	{
-		return vrapi_interfaces_cpppassalong;
+		return upstream_interfaces_cpppassalong;
 	}
 };
 

@@ -100,7 +100,6 @@ private:
 	} default_property_table[NUM_PROP_TYPES];
 
 	std::unordered_map<int, int> enum2index[NUM_PROP_TYPES];
-	
 	std::vector<std::string> custom_names[NUM_PROP_TYPES];
 	std::vector<int> custom_values[NUM_PROP_TYPES];
 };

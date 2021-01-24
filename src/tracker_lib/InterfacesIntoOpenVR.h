@@ -1,4 +1,9 @@
 #pragma once
+
+//
+// opens a dll and queries for openvr interfaces
+//
+
 #include "openvr_broker.h"
 #include <windows.h>
 

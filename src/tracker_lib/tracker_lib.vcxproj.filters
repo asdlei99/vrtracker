@@ -76,9 +76,6 @@
     <ClInclude Include="InterfacesIntoOpenVR.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="openvr_broker.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="openvr_cppstub.h">
       <Filter>Source Files</Filter>
     </ClInclude>
@@ -113,5 +110,11 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="..\externals\tinyfile\tinyfiledialogs.h" />
+    <ClInclude Include="vrdelta_trackerif.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\rangesplay\openvr_broker.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

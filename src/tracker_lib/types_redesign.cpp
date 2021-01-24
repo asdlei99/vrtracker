@@ -300,6 +300,7 @@ public:
 		slab_allocators_constructed++;
 	}
 
+	// visual studio 2012 bug: https://connect.microsoft.com/VisualStudio/feedback/details/762094
 	template<typename X, typename Y>
 	struct rebind { using other = slab_allocator<T>; };
 
@@ -1570,11 +1571,6 @@ struct vrschema
 
 	struct section_schema
 	{
-		VSDECL(bool_settings, EVRSettingsError, bool);
-		VVDECL(string_settings, EVRSettingsError, char);
-		VSDECL(float_settings, EVRSettingsError, float);
-		VSDECL(int32_settings, EVRSettingsError, int32_t);
-
 		section_schema(ALLOCATOR_DECL)
 			:
 			bool_settings(allocator),
@@ -1582,6 +1578,11 @@ struct vrschema
 			float_settings(allocator),
 			int32_settings(allocator)
 		{}
+
+		VSDECL(bool_settings, EVRSettingsError, bool);
+		VVDECL(string_settings, EVRSettingsError, char);
+		VSDECL(float_settings, EVRSettingsError, float);
+		VSDECL(int32_settings, EVRSettingsError, int32_t);
 	};
 
 	struct settings_schema
@@ -3966,7 +3967,13 @@ static void visit_eye_state(visitor_fn &visitor,
 							const AdditionalResourceKeys &c,
 							ALLOCATOR_DECL)
 {
-	visitor.start_group_node("eye", eEye);
+	const char *group_node_name;
+	if (eEye == vr::Eye_Left)
+		group_node_name = "left eye";
+	else
+		group_node_name = "right eye";
+
+	visitor.start_group_node(group_node_name, -1);
 
 	LEAF_SCALAR(projection, wrap.GetProjectionMatrix(eEye, c.GetNearZ(), c.GetFarZ()));
 	LEAF_SCALAR(eye2head, wrap.GetEyeToHeadTransform(eEye));
@@ -4000,7 +4007,7 @@ static void visit_eye_state(visitor_fn &visitor,
 	}
 	END_VECTOR(hidden_meshes);
 
-	visitor.end_group_node("eye", eEye);
+	visitor.end_group_node(group_node_name, eEye);
 }
           
 template <typename visitor_fn>
@@ -4125,7 +4132,7 @@ static void visit_controller_state(visitor_fn &visitor,
 	vrstate::system_schema *system_ss,
 	SystemWrapper &wrap, RenderModelWrapper &rmw, 
 	int controller_index, 
-	AdditionalResourceKeys &resource_keys,
+	PropertiesIndexer *indexer,
 	ALLOCATOR_DECL)
 {
 	{
@@ -4172,7 +4179,7 @@ static void visit_controller_state(visitor_fn &visitor,
 	{
 		twrap t("   system_controller_properties");
 
-		PropertiesIndexer *indexer = &resource_keys.GetDevicePropertiesIndexer();
+		
 		
 
 		structure_check(&system_ss->structure_version, ss->string_props, indexer, PropertiesIndexer::PROP_STRING, allocator);
@@ -4330,9 +4337,16 @@ static void visit_system_node(
 				sysi->GetDeviceToAbsoluteTrackingPose(TrackingUniverseSeated, 
 									resource_keys.GetPredictedSecondsToPhoton(), seated_pose_array, vr::k_unMaxTrackedDeviceCount);
 			}
+
+			PropertiesIndexer *indexer = &resource_keys.GetDevicePropertiesIndexer();
+
 			for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
 			{
-				visitor.start_group_node("controller", i);
+				// peek for a meaningful name
+				const char *group_name = "controllers";
+				int index;
+				visitor.start_group_node(group_name, i);
+
 				if (visitor.visit_source_interfaces())
 				{
 					visitor.visit_node(ss->controllers[i].raw_tracking_pose.item, make_scalar(raw_pose_array[i]));
@@ -4345,8 +4359,8 @@ static void visit_system_node(
 					visitor.visit_node(ss->controllers[i].standing_tracking_pose.item);
 					visitor.visit_node(ss->controllers[i].seated_tracking_pose.item);
 				}
-				visit_controller_state(visitor, &ss->controllers[i], ss, sysw, rmw, i, resource_keys, allocator);
-				visitor.end_group_node("controller", i);
+				visit_controller_state(visitor, &ss->controllers[i], ss, sysw, rmw, i, indexer, allocator);
+				visitor.end_group_node(group_name, i);
 			}
 		}
 		END_VECTOR(controllers);
@@ -4394,6 +4408,8 @@ static void visit_system_node(
 	visitor.end_group_node("system_node", 0);
 }
 
+// structure check means to 
+// expand internal containers when required
 template <typename HTYPE>
 void structure_check(int *structure_version, 
 	std::vector<HTYPE, ALLOCATOR_TYPE> &vec,
@@ -4478,15 +4494,17 @@ void visit_application_state(visitor_fn &visitor, vrstate::applications_schema *
 	ApplicationsWrapper &wrap, uint32_t app_index, 
 	AdditionalResourceKeys &resource_keys, ALLOCATOR_DECL)
 {
-	visitor.start_group_node("app_state", app_index); 
+	const char *app_key = nullptr;
+	int app_key_string_size;
+	app_key = resource_keys.GetApplicationsIndexer().get_key_for_index(app_index, &app_key_string_size);
+	visitor.start_group_node(app_key, -1); 
+
 	vrstate::application_schema *ss = &applications->applications[app_index];
 
-	const char *app_key = nullptr;
+	
 	if (visitor.visit_source_interfaces())
 	{
-		int count;
-		app_key = resource_keys.GetApplicationsIndexer().get_key_for_index(app_index, &count);
-		visitor.visit_node(ss->application_key.item, app_key, count);
+		visitor.visit_node(ss->application_key.item, app_key, app_key_string_size);
 		scalar<uint32_t> process_id_tmp = wrap.GetApplicationProcessId(app_key);
 		LEAF_SCALAR(process_id, process_id_tmp);
 		LEAF_VECTOR0(application_launch_arguments, wrap.GetApplicationLaunchArguments(process_id_tmp.val));
@@ -4513,7 +4531,7 @@ void visit_application_state(visitor_fn &visitor, vrstate::applications_schema *
 	structure_check(&applications->structure_version, ss->uint64_props, indexer, PropertiesIndexer::PROP_UINT64, allocator);
 	visit_vec(visitor, ss->uint64_props, wrap, app_key, indexer, PropertiesIndexer::PROP_UINT64, "uint64_props");
 
-	visitor.end_group_node("app_state", app_index);
+	visitor.end_group_node(app_key, -1);
 }
 
 template <typename visitor_fn>
@@ -4539,7 +4557,7 @@ template <typename visitor_fn>
 static void visit_applications_node(visitor_fn &visitor, vrstate::applications_schema *ss, ApplicationsWrapper &wrap, 
 	 AdditionalResourceKeys &resource_keys, ALLOCATOR_DECL)
 {
-	visitor.start_group_node("app", -1);
+	visitor.start_group_node("applications", -1);
 
 	if (visitor.visit_source_interfaces())
 	{
@@ -4595,7 +4613,7 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 	}
 	END_VECTOR(applications);
 
-	visitor.end_group_node("app", -1);
+	visitor.end_group_node("applications", -1);
 }
 
 template <typename HTYPE>
@@ -4713,7 +4731,7 @@ static void visit_settings_node(
 									AdditionalResourceKeys &resource_keys,
 									ALLOCATOR_DECL)
 {
-	visitor.start_group_node("settings_schema", -1);
+	visitor.start_group_node("settings", -1);
 
 	int required_size = resource_keys.GetSettingsIndexer().GetNumSections();
 	if (ss->sections.size() < required_size)
@@ -4733,7 +4751,7 @@ static void visit_settings_node(
 	}
 	END_VECTOR(sections);
 
-	visitor.end_group_node("settings_schema", -1);
+	visitor.end_group_node("settings", -1);
 }
 
 template <typename visitor_fn>
@@ -4743,7 +4761,7 @@ static void visit_chaperone_node(
 									ChaperoneWrapper &wrap,
 									const AdditionalResourceKeys &resource_keys)
 {
-	visitor.start_group_node("chaperone_schema", -1);
+	visitor.start_group_node("chaperone", -1);
 		LEAF_SCALAR(calibration_state, wrap.GetCalibrationState());
 		LEAF_SCALAR(bounds_visible,   wrap.AreBoundsVisible());
 		LEAF_SCALAR(play_area_rect, wrap.GetPlayAreaRect());
@@ -4814,7 +4832,7 @@ static void visit_compositor_state(visitor_fn &visitor,
 									vrstate::compositor_schema *ss, CompositorWrapper wrap, 
 									AdditionalResourceKeys &config, ALLOCATOR_DECL)
 {
-	visitor.start_group_node("compositor_schema", -1);
+	visitor.start_group_node("compositor", -1);
 	{
 		twrap t(" compositor_schema scalars");
 
@@ -5408,6 +5426,11 @@ struct tracker
 	AdditionalResourceKeys additional_resource_keys;
 	
 	vrstate m_state;
+	// cursors are responsible for detecting changes in m_state on their own
+	// should TreeNodeIF do the same?
+	// the principle is that updates to m_state are not blocked so they should be kept 
+	// up to date in the history walk.  though it should be made cheap to check
+	// when the structure does change.
 	
 	std::forward_list<FrameNumberedEvent, ALLOCATOR_TYPE>  m_events;
 	std::forward_list<int64_t, ALLOCATOR_TYPE>  m_timestamps;
@@ -9344,7 +9367,8 @@ struct VRCursor
 	VRCursor(tracker *tracker, ALLOCATOR_DECL)
 		:
 		iterators(allocator),
-		m_context(tracker->m_frame_number, &iterators, &tracker->m_state, &tracker->m_events, &tracker->additional_resource_keys, allocator),
+		m_context(tracker->m_frame_number, &iterators, &tracker->m_state, 
+			&tracker->m_events, &tracker->additional_resource_keys, allocator),
 		m_system_cursor(&m_context),
 		m_applications_cursor(&m_context),
 		m_settings_cursor(&m_context),
@@ -9405,6 +9429,9 @@ struct VRCursor
 	openvr_broker::open_vr_interfaces m_interfaces;
 };
 
+//
+// external interface
+//
 vr_cursor_t create_cursor(vr_state_tracker_t h)
 {
 	tracker *s = static_cast<tracker*>(h);
@@ -9839,6 +9866,18 @@ struct vector_node_data_if : TrackerNodeIF
 	{
 		return children.size();
 	}
+	virtual TrackerNodeIF *GetChild(int i) override
+	{
+		if (i >= 0 && i < children.size())
+		{
+			return children[i];
+		}
+		else
+		{
+			return nullptr;
+		}
+
+	}
 	
 	virtual std::string GetChangeDescriptionString() override
 	{
@@ -10095,7 +10134,10 @@ struct event_node_cursor : change_of_state
 	}
 };
 
-
+//
+// exposes the change_of_state interface 
+// holds a reference to a history node
+//
 template <typename T, typename P, typename AllocatorT>
 struct history_node_cos : change_of_state
 {
@@ -10154,7 +10196,7 @@ struct cached_iterator
 	inline bool start_iterator(int start_frame_in, int end_frame_in, const iterator_type &begin, const iterator_type &end)
 	{
 		start_frame_id = start_frame_in; // keep this so the get_next() knows when to return null
-
+		
 		bool rc = false;
 		if (end_frame_in == cache_end_frame_id && start_frame_in == cache_start_frame_id)
 		{
@@ -10261,6 +10303,12 @@ struct event_node_if : TrackerNodeIF
 	{
 		return 0;
 	}
+
+	virtual TrackerNodeIF *GetChild(int i) override
+	{
+		return nullptr;
+	}
+
 	virtual TrackerNodeIF *GetParent() override
 	{
 		return m_parent;
@@ -10364,8 +10412,8 @@ struct history_node_if : TrackerNodeIF
 	std::string popup_menu_label;
 	std::string label;
 
-	cached_iterator <history_iter> c_iter;
-	history_node_cos<T, P, AllocatorT > current_cos;	// this is the 'current change of state
+	cached_iterator <history_iter> c_iter;				// this citer should be moved to the grid_node
+	history_node_cos<T, P, AllocatorT > current_cos;	// this is the 'current change of state' for this history node - can it be combined with citer
 
 	history_node_if(const std::string &path, history_node *base, TrackerNodeIF *parent, int index_into_parent)
 		:	m_history_node(base),
@@ -10389,6 +10437,10 @@ struct history_node_if : TrackerNodeIF
 	int GetChildCount() override
 	{
 		return 0;
+	}
+	virtual TrackerNodeIF *GetChild(int i) override
+	{
+		return nullptr;
 	}
 
 	virtual const char *GetLabel( int *size ) override
@@ -10531,7 +10583,9 @@ struct TrackerNodeBuilder
 			my_index = parent->children.size();
 
 		vector_node_data_if* data_if = new vector_node_data_if(group_name.c_str(), parent, my_index);
-		m_vec->push_back(data_if);
+		if (parent)
+			parent->children.push_back(data_if);
+		m_vec->push_back(data_if); 
 
 		// push group node onto stacks
 		path_stack.push_back(group_name);
@@ -10577,6 +10631,7 @@ static TrackerNodeIF* build_tracker_tree(std::vector<TrackerNodeIF*> *all_nodes,
 
 	// add event row
 	TrackerNodeIF* event_data_if = new event_node_if(s, root, 0);
+	root->children.push_back(event_data_if);
 	all_nodes->push_back(event_data_if);
 
 	// add row for each of the nodes in the vr state

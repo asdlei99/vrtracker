@@ -235,40 +235,6 @@ void advance_cursor_one_frame(vr_state_tracker_t hstate, vr_cursor_t hcursor);
 void destroy_cursor(vr_cursor_t h);
 
 
-#include <string> // blargh
-
-//
-// a view into the data
-// 
-struct change_of_state
-{
-	virtual int GetFrameNumber() = 0;
-	virtual int GetPrevFrameNumber() = 0;
-	virtual void *unique_id() = 0;
-	virtual std::string GetChangeDescriptionString() = 0;
-	virtual std::string GetPrevDescriptionString() = 0;
-};
-
-struct TrackerNodeIF
-{
-	virtual const char *GetLabel() = 0;
-	virtual const char *GetLabel(int *size) = 0;
-
-	virtual int GetChildCount() = 0;
-	virtual TrackerNodeIF *GetParent() = 0;
-	virtual int GetMyIndexInParent() = 0;
-
-	virtual const char *GetPopupMenuLabel() = 0;
-	virtual std::string GetChangeDescriptionString() = 0;
-	virtual bool has_changes() = 0;
-	virtual bool start_iterator(int start_frame, int end_frame) = 0;
-	virtual change_of_state* get_next() = 0;
-	virtual change_of_state* peek_next() = 0;
-	virtual change_of_state* get_latest() = 0;
-};
-
-TrackerNodeIF *get_node_if(vr_state_tracker_t);
-
 
 
 

@@ -136,32 +136,6 @@ void PropertiesIndexer::ReadFromStream(EncodeStream &s)
 }
 
 
-void ApplicationsPropertiesIndexer::Init()
-{
-	PropertiesIndexer::Init(
-		(const device_property_row*)application_bool_properties_table, TBL_SIZE(application_bool_properties_table),
-		(const device_property_row*)application_string_properties_table, TBL_SIZE(application_string_properties_table),
-		(const device_property_row*)application_uint64_properties_table, TBL_SIZE(application_uint64_properties_table),
-		nullptr, 0,
-		nullptr, 0,
-		nullptr, 0);
-}
-
-void ApplicationsPropertiesIndexer::WriteToStream(EncodeStream &s)
-{
-		int x = 33;
-		encode(x, s);
-		PropertiesIndexer::WriteToStream(s);
-}
-
-void ApplicationsPropertiesIndexer::ReadFromStream(EncodeStream &s)
-{
-		int x;
-		decode(x, s);
-		assert(x == 33);
-		Init();
-		PropertiesIndexer::ReadFromStream(s);
-}
 
 
 void DevicePropertiesIndexer::Init
