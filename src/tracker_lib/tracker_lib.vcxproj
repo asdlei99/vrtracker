@@ -22,13 +22,13 @@
     <ProjectGuid>{00D95378-4318-480D-8941-9A9DA683C255}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>tracker_lib</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.18362.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -77,7 +77,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>OPENVR_STRINGS_DISABLE_PASSTHRU;HAVE_IMG_GUI;HAVE_OPEN_VR_RAW; WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;..\externals\gl3w\include;..\externals\pcre2-10.22\cmake-sean;$(OPENVR_BASE)/headers;$(OPENVR_BASE)/samples;C:\projects\vrstrings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;..\externals\gl3w\include;..\externals\pcre2-10.22\cmake-sean;..\submodules\openvr\headers;$(OPENVR_BASE)/samples;..\submodules\openvr_strings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -136,15 +136,15 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\vrstrings\src\openvr_string_gen_enums.cpp" />
-    <ClCompile Include="..\..\..\vrstrings\src\openvr_string_passthru_enums.cpp" />
-    <ClCompile Include="..\..\..\vrstrings\src\openvr_string_structs.cpp" />
     <ClCompile Include="..\externals\gl3w\src\gl3w.c" />
     <ClCompile Include="..\externals\imgui\imgui.cpp" />
     <ClCompile Include="..\externals\imgui\imgui_demo.cpp" />
     <ClCompile Include="..\externals\imgui\imgui_draw.cpp" />
     <ClCompile Include="..\externals\imgui\imgui_impl_sdl_gl3.cpp" />
     <ClCompile Include="..\externals\tinyfile\tinyfiledialogs.c" />
+    <ClCompile Include="..\submodules\openvr_strings\src\openvr_string_gen_enums.cpp" />
+    <ClCompile Include="..\submodules\openvr_strings\src\openvr_string_passthru_enums.cpp" />
+    <ClCompile Include="..\submodules\openvr_strings\src\openvr_string_structs.cpp" />
     <ClCompile Include="dprintf.cpp" />
     <ClCompile Include="InterfacesIntoOpenVR.cpp" />
     <ClCompile Include="openvr_cppstub.cpp" />

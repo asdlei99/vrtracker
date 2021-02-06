@@ -7,6 +7,7 @@
 #include "vrdelta.h"
 #include "dprintf.h"
 #include "openvr_indexers.h"
+#include "vrdelta_trackerif.h"
 
 #include <chrono>
 #include <type_traits>
@@ -4344,7 +4345,6 @@ static void visit_system_node(
 			{
 				// peek for a meaningful name
 				const char *group_name = "controllers";
-				int index;
 				visitor.start_group_node(group_name, i);
 
 				if (visitor.visit_source_interfaces())
@@ -4417,7 +4417,7 @@ void structure_check(int *structure_version,
 	PropertiesIndexer::PropertySettingType prop_type, ALLOCATOR_DECL)
 {
 	int num_props = indexer->GetNumPropertiesOfType(prop_type);
-	if (vec.size() < num_props)
+	if ((int)vec.size() < num_props)
 	{
 		vec.reserve(num_props);
 		for (int index = 0; index < num_props; index++)
@@ -4593,7 +4593,7 @@ static void visit_applications_node(visitor_fn &visitor, vrstate::applications_s
 
 	int num_mime_types = resource_keys.GetMimeTypesIndexer().GetNumMimeTypes();
 	ss->mime_types.reserve(num_mime_types);
-	while (ss->mime_types.size() < num_mime_types)
+	while ((int)ss->mime_types.size() < num_mime_types)
 	{
 		ss->mime_types.emplace_back(allocator);
 		ss->structure_version++;
@@ -4625,7 +4625,7 @@ void structure_check(
 	SettingsIndexer::SectionSettingType setting_type, ALLOCATOR_DECL)
 {
 	int required_size = indexer->GetNumFields(section_name, setting_type);
-	if (vec.size() < required_size)
+	if ((int)vec.size() < required_size)
 	{
 		vec.reserve(required_size);
 		const char **field_names = indexer->GetFieldNames(section_name, setting_type);
@@ -4734,10 +4734,10 @@ static void visit_settings_node(
 	visitor.start_group_node("settings", -1);
 
 	int required_size = resource_keys.GetSettingsIndexer().GetNumSections();
-	if (ss->sections.size() < required_size)
+	if ((int)ss->sections.size() < required_size)
 	{
 		ss->sections.reserve(vr::k_unMaxTrackedDeviceCount);
-		while (ss->sections.size() < required_size)
+		while ((int)ss->sections.size() < required_size)
 		{
 			ss->sections.emplace_back(allocator);
 		}
@@ -5850,7 +5850,7 @@ public:
 			int index = (int)iter_ref.controllers.size()-1;	
 		}
 
-		for (int i = 0; i < iter_ref.controllers.size(); i++)
+		for (int i = 0; i < (int)iter_ref.controllers.size(); i++)
 		{
 			while (iter_ref.controllers[i].components.size() < state_ref.controllers[i].components.size())
 			{
@@ -6655,7 +6655,7 @@ struct VRApplicationsCursor : public VRApplicationsCppStub
 			iter_ref.mime_types.emplace_back(m_context->m_allocator);
 		}
 
-		for (int i = 0; i < iter_ref.applications.size(); i++)
+		for (int i = 0; i < (int)iter_ref.applications.size(); i++)
 		{
 			while (iter_ref.applications[i].string_props.size() < state_ref.applications[i].string_props.size())
 			{
@@ -7118,10 +7118,10 @@ public:
 		{
 			iter_ref.sections.emplace_back(m_context->m_allocator);
 		}
-		for (int index = 0; index < iter_ref.sections.size(); index++)
+		for (int index = 0; index < (int)iter_ref.sections.size(); index++)
 		{
 			for (int j = iter_ref.sections[index].bool_settings.size();
-				 j < state_ref.sections[index].bool_settings.size(); 
+				 j < (int)state_ref.sections[index].bool_settings.size(); 
 				j++)
 			{
 				iter_ref.sections[index].bool_settings.emplace_back(
@@ -7130,7 +7130,7 @@ public:
 			}
 
 			for (int j = iter_ref.sections[index].float_settings.size();
-				j < state_ref.sections[index].float_settings.size();
+				j < (int)state_ref.sections[index].float_settings.size();
 				j++)
 			{
 				iter_ref.sections[index].float_settings.emplace_back(
@@ -7139,7 +7139,7 @@ public:
 			}
 
 			for (int j = iter_ref.sections[index].int32_settings.size();
-				j < state_ref.sections[index].int32_settings.size();
+				j < (int)state_ref.sections[index].int32_settings.size();
 				j++)
 			{
 				iter_ref.sections[index].int32_settings.emplace_back(
@@ -7148,7 +7148,7 @@ public:
 			}
 
 			for (int j = iter_ref.sections[index].string_settings.size();
-				j < state_ref.sections[index].string_settings.size();
+				j < (int)state_ref.sections[index].string_settings.size();
 				j++)
 			{
 				iter_ref.sections[index].string_settings.emplace_back(
@@ -8389,7 +8389,7 @@ public:
 			iter_ref.models.emplace_back(m_context->m_allocator);			
 		}
 
-		for (int model_index = 0; model_index < iter_ref.models.size(); model_index++)
+		for (int model_index = 0; model_index < (int)iter_ref.models.size(); model_index++)
 		{
 			while (iter_ref.models[model_index].components.size() < (int)state_ref.models[model_index].components.size())
 			{
@@ -9868,7 +9868,7 @@ struct vector_node_data_if : TrackerNodeIF
 	}
 	virtual TrackerNodeIF *GetChild(int i) override
 	{
-		if (i >= 0 && i < children.size())
+		if (i >= 0 && i < (int)children.size())
 		{
 			return children[i];
 		}
@@ -10672,7 +10672,7 @@ static void get_grid_nodes(grid_node_set &grid_nodes, int *num_frames, tracker *
 	build_tracker_tree(&all_nodes, s);
 
 	grid_nodes.nodes.reserve(all_nodes.size());
-	for (int i = 0; i < all_nodes.size(); i++)
+	for (int i = 0; i < (int)all_nodes.size(); i++)
 	{
 		TrackerNodeIF *data_if = all_nodes[i];
 		grid_nodes.nodes.push_back(new grid_node(data_if));

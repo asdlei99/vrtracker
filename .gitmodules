@@ -1,0 +1,6 @@
+[submodule "src/submodules/openvr"]
+	path = src/submodules/openvr
+	url = https://github.com/ValveSoftware/openvr
+[submodule "src/submodules/openvr_strings"]
+	path = src/submodules/openvr_strings
+	url = https://github.com/spayne/openvr_strings

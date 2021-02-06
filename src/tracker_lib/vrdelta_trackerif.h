@@ -7,6 +7,7 @@
 
 // consider exposing direct references to the nodes to 
 // the ui - let the ui decide what level of abstraction it wants.
+#if 0
 VRVariant
 {
 	union
@@ -15,6 +16,7 @@ VRVariant
 	};
 
 }
+
 
 // I'd like tracker node if to expose raw types and not strings
 // TrackerNodeIF
@@ -83,6 +85,7 @@ struct TrackerNodeIF2
 	virtual ChangeOfStateIterator *start_iterator(int start_frame, int end_frame) = 0;
 };
 
+#endif
 
 
 
