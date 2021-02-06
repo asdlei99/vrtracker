@@ -424,7 +424,7 @@ void VRSystemCppPassalong::GetDeviceToAbsoluteTrackingPose(vr::ETrackingUniverse
 	   vr::TrackedDevicePose_t *tmp = (struct vr::TrackedDevicePose_t *)malloc(sizeof(vr::TrackedDevicePose_t) * unTrackedDevicePoseArrayCount);
 	   memset(tmp, 0, unTrackedDevicePoseArrayCount * sizeof(unTrackedDevicePoseArrayCount));
 	   tracker_cursor_interfaces.sysi->GetDeviceToAbsoluteTrackingPose(eOrigin, fPredictedSecondsToPhotonsFromNow, tmp, unTrackedDevicePoseArrayCount);
-	   for (int i = 0; i < unTrackedDevicePoseArrayCount; i++)
+	   for (int i = 0; i < (int)unTrackedDevicePoseArrayCount; i++)
 	   {
 		   TRAIN_TRACKER_ASSERT(softcompare_is_similar(tmp[i], pTrackedDevicePoseArray[i], 0.0001f));
 	   }

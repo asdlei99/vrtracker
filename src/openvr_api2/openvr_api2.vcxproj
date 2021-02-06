@@ -22,13 +22,13 @@
     <ProjectGuid>{8C76F9C2-29DA-44D5-8C1C-78DC6FD925FF}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>openvr_api2</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -41,7 +41,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
@@ -88,7 +88,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>HAVE_OPEN_VR_RAW;VR_API_EXPORT;WIN32;_DEBUG;_WINDOWS;_USRDLL;OPENVR_API2_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\tracker_lib;.;..\externals\gl3w\include;..\..\externals\pcre2-10.22\cmake-sean;$(OPENVR_BASE)/headers;$(OPENVR_BASE)/samples;C:\projects\vrstrings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\tracker_lib;.;..\externals\gl3w\include;..\..\externals\pcre2-10.22\cmake-sean;..\submodules\openvr/headers;$(OPENVR_BASE)/samples;..\submodules\openvr_strings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -104,7 +104,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>HAVE_OPEN_VR_RAW;VR_API_EXPORT;_DEBUG;_WINDOWS;_USRDLL;OPENVR_API2_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\tracker_lib;.;..\externals\gl3w\include;..\..\externals\pcre2-10.22\cmake-sean;$(OPENVR_BASE)/headers;$(OPENVR_BASE)/samples;C:\projects\vrstrings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\tracker_lib;.;..\externals\gl3w\include;..\..\externals\pcre2-10.22\cmake-sean;..\submodules\openvr/headers;$(OPENVR_BASE)/samples;..\submodules\openvr_strings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

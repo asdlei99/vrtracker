@@ -298,9 +298,9 @@ static void scratch(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib)
 	pose2A8.vVelocity = { 10000, 20000, 30000.0f };
 	pose2A8.vAngularVelocity = { 1.f, 2.f, 3.f };
 	vr::HmdMatrix34_t transform_with_modified_translation2 =
-	{ 11, 3, 775, 1000,
-		6, .3, 76, 5,
-		2, 22, 9090, 17 };
+	{ 11.0f, 3.0f, 775.0f, 1000.0f,
+		6.0f, .3f, 76.0f, 5.0f,
+		2.0f, 22.0f, 9090.0f, 17.0f };
 	DoApplyTransform(ia, ib,&output2A8, &pose2A8, 
 					&transform_with_modified_translation2);
 	assert(output2A8.vVelocity == output2A7.vVelocity);
@@ -356,9 +356,9 @@ static void scratch(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib)
 	assert(output2B1.vVelocity == output.vVelocity);
 	for (int i = 0; i < 1000; i++)
 	{
-		pose2B1.mDeviceToAbsoluteTracking.m[0][3] = randMToN(-10.0f, 10.0f);
-		pose2B1.mDeviceToAbsoluteTracking.m[1][3] = randMToN(-10.0f, 10.0f);
-		pose2B1.mDeviceToAbsoluteTracking.m[2][3] = randMToN(-10.0f, 10.0f);
+		pose2B1.mDeviceToAbsoluteTracking.m[0][3] = (float)randMToN(-10.0f, 10.0f);
+		pose2B1.mDeviceToAbsoluteTracking.m[1][3] = (float)randMToN(-10.0f, 10.0f);
+		pose2B1.mDeviceToAbsoluteTracking.m[2][3] = (float)randMToN(-10.0f, 10.0f);
 		DoApplyTransform(ia, ib,&output2B1, &pose2B1, &x_translation);
 		assert(output2B1.vVelocity == output.vVelocity);
 	}
@@ -371,9 +371,9 @@ static void scratch(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib)
 	float angle = 3.14f / 4.0f;
 	vr::HmdMatrix34_t y_axis_rotation =
 	{
-		cos(angle)*.1, .1, sin(angle), 1000,
-		0,        1, 0,					0,
-		-sin(angle)*.1, 0, cos(angle),	0
+		cos(angle)*.1f, .1f, sin(angle), 1000.0f,
+		0.0f,        1.0f, 0,					0,
+		-sin(angle)*.1f, 0, cos(angle),	0
 	};
 	DoApplyTransform(ia, ib,&output3, &pose, &y_axis_rotation);
 	assert(output3.vVelocity == output.vVelocity);
@@ -392,7 +392,7 @@ static void scratch(OpenVRInterfaceUnderTest *ia, OpenVRInterfaceUnderTest *ib)
 		{
 			for (int c = 0; c < 3; c++) // don't to last col
 			{
-				tx.m[r][c] = randMToN(-10.0f, 10.0f);
+				tx.m[r][c] = (float)randMToN(-10.0f, 10.0f);
 			}
 		}
 		tx.m[0][3] = 1000;
@@ -507,7 +507,6 @@ static void DoesFrameAffectVelocities(OpenVRInterfaceUnderTest *ia, OpenVRInterf
 
 
 	std::vector<vr::HmdMatrix34_t> transforms = { x_axis_rotation , x_translation, x_scale, x_shear };
-	vr::TrackedDevicePose_t outputA;
 	for (auto transform : transforms)
 	{
 		vr::TrackedDevicePose_t outputA, output2, output3, output4;

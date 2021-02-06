@@ -371,7 +371,7 @@ int profiler_main()
 #endif
 
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-        }
+        
 
         // 2. Show another simple window, this time using an explicit Begin/End pair
         if (show_all_state)

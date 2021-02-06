@@ -22,7 +22,7 @@
     <ProjectGuid>{00D95378-4318-480D-8941-9A9DA683C255}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>tracker_lib</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.18362.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -79,6 +79,7 @@
       <PreprocessorDefinitions>OPENVR_STRINGS_DISABLE_PASSTHRU;HAVE_IMG_GUI;HAVE_OPEN_VR_RAW; WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.;..\externals\gl3w\include;..\externals\pcre2-10.22\cmake-sean;..\submodules\openvr\headers;$(OPENVR_BASE)/samples;..\submodules\openvr_strings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+      <StructMemberAlignment>Default</StructMemberAlignment>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -93,6 +94,7 @@
       <PreprocessorDefinitions>OPENVR_STRINGS_DISABLE_PASSTHRU;HAVE_IMG_GUI;HAVE_OPEN_VR_RAW;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.;..\externals\gl3w\include;..\externals\pcre2-10.22\cmake-sean;$(OPENVR_BASE)/headers;$(OPENVR_BASE)/samples;C:\projects\vrstrings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+      <StructMemberAlignment>Default</StructMemberAlignment>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -108,6 +110,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>OPENVR_STRINGS_DISABLE_PASSTHRU;HAVE_IMG_GUI;HAVE_OPEN_VR_RAW;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.;..\externals\gl3w\include;..\externals\pcre2-10.22\cmake-sean;$(OPENVR_BASE)/headers;$(OPENVR_BASE)/samples;C:\projects\vrstrings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
+      <StructMemberAlignment>Default</StructMemberAlignment>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -125,6 +128,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>OPENVR_STRINGS_DISABLE_PASSTHRU;HAVE_IMG_GUI;HAVE_OPEN_VR_RAW;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.;..\externals\gl3w\include;..\externals\pcre2-10.22\cmake-sean;$(OPENVR_BASE)/headers;$(OPENVR_BASE)/samples;C:\projects\vrstrings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
+      <StructMemberAlignment>Default</StructMemberAlignment>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

@@ -104,6 +104,10 @@ private:
 	std::vector<int> custom_values[NUM_PROP_TYPES];
 };
 
+#if 0
+
+SDP 2/6/2021 - Todo
+
 class ApplicationsPropertiesIndexer : public PropertiesIndexer
 {
 public:
@@ -111,6 +115,7 @@ public:
 	void WriteToStream(EncodeStream &s);
 	void ReadFromStream(EncodeStream &s);
 };
+#endif 
 
 class DevicePropertiesIndexer : public PropertiesIndexer
 {

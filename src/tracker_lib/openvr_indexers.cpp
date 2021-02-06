@@ -127,7 +127,7 @@ void PropertiesIndexer::ReadFromStream(EncodeStream &s)
 		read_int_vector_from_stream(s, custom_values[setting_type]);
 
 		enum2index[setting_type].reserve(enum2index[setting_type].size() + custom_values[setting_type].size());
-		for (int i = 0; i < custom_values[setting_type].size(); i++)
+		for (int i = 0; i < (int)custom_values[setting_type].size(); i++)
 		{
 			int index = enum2index[setting_type].size();
 			enum2index[setting_type].insert({ (int)custom_values[setting_type][i], index });
@@ -325,7 +325,7 @@ void SettingsIndexer::ReadFromStream(EncodeStream &s)
 			read_string_vector_from_stream(s, tmp_sections);
 			read_string_vector_from_stream(s, tmp_settings);
 
-			for (int j = 0; j < tmp_sections.size(); j++)
+			for (int j = 0; j < (int)tmp_sections.size(); j++)
 			{
 				AddCustomSetting(tmp_sections[j].c_str(), SectionSettingType(i), tmp_settings[j].c_str());
 			}

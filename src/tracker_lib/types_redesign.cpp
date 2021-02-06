@@ -3755,7 +3755,10 @@ struct AdditionalResourceKeys
 {
 	OverlayIndexer	&GetOverlayIndexer()			{ return m_overlay_indexer; }
 	ApplicationsIndexer &GetApplicationsIndexer()	{ return m_applications_indexer; }
+#if 0
+	// SDP todo 2/6/2021
 	ApplicationsPropertiesIndexer &GetApplicationsPropertiesIndexer() { return m_applications_properties_indexer; }
+#endif
 	ResourcesIndexer &GetResourcesIndexer()			{ return m_resources_indexer; }
 	SettingsIndexer &GetSettingsIndexer()			{ return m_settings_indexer; }
 	DevicePropertiesIndexer &GetDevicePropertiesIndexer() { return m_device_properties_indexer; }
@@ -3774,7 +3777,7 @@ struct AdditionalResourceKeys
 			c.custom_settings.num_string_settings,	c.custom_settings.string_sections,	c.custom_settings.string_names,
 			c.custom_settings.num_float_settings,	c.custom_settings.float_sections,	c.custom_settings.float_names
 		);
-		m_applications_properties_indexer.Init();
+		// SDP todo m_applications_properties_indexer.Init();
 		auto *props = &c.custom_tracked_device_properties;
 		m_device_properties_indexer.Init(
 			props->num_bool_properties,		props->bool_names,		props->bool_values,
@@ -3805,7 +3808,7 @@ struct AdditionalResourceKeys
 		stream.memcpy_out_to_stream(&m_data, sizeof(m_data));
 		m_overlay_indexer.WriteToStream(stream);
 		m_applications_indexer.WriteToStream(stream);
-		m_applications_properties_indexer.WriteToStream(stream);
+		// SDP todo m_applications_properties_indexer.WriteToStream(stream);
 		m_device_properties_indexer.WriteToStream(stream);
 		m_resources_indexer.WriteToStream(stream);
 		m_settings_indexer.WriteToStream(stream);
@@ -3816,7 +3819,7 @@ struct AdditionalResourceKeys
 		stream.memcpy_from_stream(&m_data, sizeof(m_data));
 		m_overlay_indexer.ReadFromStream(stream);
 		m_applications_indexer.ReadFromStream(stream);
-		m_applications_properties_indexer.ReadFromStream(stream);
+		// SDP todo m_applications_properties_indexer.ReadFromStream(stream);
 		m_device_properties_indexer.ReadFromStream(stream);
 		m_resources_indexer.ReadFromStream(stream);
 		m_settings_indexer.ReadFromStream(stream);
@@ -3866,7 +3869,10 @@ private:
 
 	OverlayIndexer m_overlay_indexer;
 	ApplicationsIndexer m_applications_indexer;
+#if 0
+	// SDP todo 2/6/2021
 	ApplicationsPropertiesIndexer m_applications_properties_indexer;
+#endif
 	ResourcesIndexer m_resources_indexer;
 	SettingsIndexer m_settings_indexer;
 	DevicePropertiesIndexer m_device_properties_indexer;
@@ -4520,6 +4526,8 @@ void visit_application_state(visitor_fn &visitor, vrstate::applications_schema *
 	LEAF_SCALAR(auto_launch, wrap.GetApplicationAutoLaunch(app_key));
 	LEAF_VECTOR1(supported_mime_types, wrap.GetApplicationSupportedMimeTypes(app_key));
 	
+#if 0
+	// SDP todo
 	ApplicationsPropertiesIndexer *indexer = &resource_keys.GetApplicationsPropertiesIndexer();
 	
 	structure_check(&applications->structure_version, ss->string_props, indexer, PropertiesIndexer::PROP_STRING, allocator);
@@ -4530,6 +4538,7 @@ void visit_application_state(visitor_fn &visitor, vrstate::applications_schema *
 
 	structure_check(&applications->structure_version, ss->uint64_props, indexer, PropertiesIndexer::PROP_UINT64, allocator);
 	visit_vec(visitor, ss->uint64_props, wrap, app_key, indexer, PropertiesIndexer::PROP_UINT64, "uint64_props");
+#endif
 
 	visitor.end_group_node(app_key, -1);
 }
@@ -6626,15 +6635,15 @@ struct VRApplicationsCursor : public VRApplicationsCppStub
 	vrstate::applications_schema &state_ref;
 	vriterator::applications_schema &iter_ref;
 	ApplicationsIndexer *m_applications_indexer;
-	ApplicationsPropertiesIndexer *m_property_indexer;
+	// SDP todo ApplicationsPropertiesIndexer *m_property_indexer;
 
 	VRApplicationsCursor(CursorContext *context)
 		:
 		m_context(context),
 		state_ref(m_context->state->applications_node),
-		iter_ref(m_context->iterators->applications_node),
-		m_applications_indexer(&m_context->m_resource_keys->GetApplicationsIndexer()),
-		m_property_indexer(&m_context->m_resource_keys->GetApplicationsPropertiesIndexer())
+		iter_ref(m_context->iterators->applications_node)
+		// SDP todo  m_applications_indexer(&m_context->m_resource_keys->GetApplicationsIndexer()),
+		// SDP todo m_property_indexer(&m_context->m_resource_keys->GetApplicationsPropertiesIndexer())
 	{
 		SynchronizeChildVectors();
 	}
@@ -6853,6 +6862,8 @@ bool VRApplicationsCursor::lookup_app_and_property_index(
 	vr::EVRApplicationError app_error = vr::VRApplicationError_None;
 	if (GetInternalIndexForAppKey(pchAppKey, app_index))
 	{
+#if 0
+		// SDP todo
 		if (m_property_indexer->GetIndexForEnum(setting_type, prop_enum, prop_index))
 		{
 			rc = true;
@@ -6861,6 +6872,7 @@ bool VRApplicationsCursor::lookup_app_and_property_index(
 		{
 			app_error = vr::VRApplicationError_UnknownProperty;
 		}
+#endif
 	}
 	else
 	{
