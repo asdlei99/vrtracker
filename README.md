@@ -1,5 +1,15 @@
 Profile, record and playback openvr events and state
 
+Here is the profiler showing changes of state between frames in an imgui interface:
+
+![profiler image](images/standalone_profiler_state_stream.png?raw=true)
+
+Here is the profiler showing the deltas between frames of two openvr objects: 
+
+
+![profiler image 2](images/standalone_profiler_compare_frames.png?raw=true)
+
+
 The idea is that to be able to work in VR it's still nice for programmers to do most of their work in 2D.  The ability
 to see the events arriving and state changing over time is part of the profiling features.  
 
