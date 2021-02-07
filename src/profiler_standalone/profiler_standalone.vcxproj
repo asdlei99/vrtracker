@@ -88,13 +88,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>HAVE_OPEN_VR_RAW;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\externals\tinyfile;..\tracker_lib;.;..\externals\gl3w\include;..\..\externals\pcre2-10.22\cmake-sean;$(OPENVR_BASE)/headers;$(OPENVR_BASE)/samples;C:\projects\vrstrings\headers;..\externals\imgui;..\externals\gl3w\include;$(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\externals\tinyfile;..\tracker_lib;.;..\externals\gl3w\include;..\..\externals\pcre2-10.22\cmake-sean;..\submodules\openvr\headers;..\submodules\openvr_strings\headers;..\externals\imgui;..\externals\gl3w\include;../submodules/openvr/samples/thirdparty/sdl2-2.0.3/include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>sdl2main.lib;pcre2-8d.lib;opengl32.lib;openvr_api.lib;tracker_lib.lib;SDL2.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\externals\pcre2-10.22\cmake-sean\DebugSave;C:\projects\vrtracker\src\vrtracker_solution\Debug;$(OPENVR_BASE)/lib/win32; $(OPENVR_BASE)/samples/thirdparty/sdl2-2.0.3/bin/win32</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>..\externals\pcre2-10.22\cmake-sean\DebugSave;..\submodules\openvr\samples\thirdparty\sdl2-2.0.3\bin\win32;..\submodules\openvr\lib\win32;..\vrtracker_solution\Debug</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
     </Link>
   </ItemDefinitionGroup>
